@@ -2249,20 +2249,36 @@ function processLoadedModel(inner, { label = '' } = {}) {
   return loadedModels[loadedModels.length - 1];
 }
 
+// ── Global load-progress tracker ─────────────────────────────────────────────
+// GitHub Pages gzip-encodes GLBs: Content-Length is the *compressed* size but
+// xhr.loaded is *decompressed* bytes, so the per-file ratio can exceed 1.0 and
+// show numbers > 100.  We instead track progress across ALL files combined so
+// the bar moves smoothly 0 → 100 without ever jumping backward or past 100.
+const _lp = { total: 0, done: 0 };
+
+function _lpUpdate(fileFraction) {
+  // fileFraction ∈ [0, 1] — how far through the current file we are.
+  const overall = (_lp.done + Math.min(1, fileFraction)) / Math.max(1, _lp.total);
+  const pct = Math.min(100, Math.round(overall * 100));
+  loadingBar.style.width = pct + '%';
+  loadingPercent.textContent = pct;
+}
+
 function loadGLB(path, opts) {
   return new Promise((resolve, reject) => {
     gltfLoader.load(
       path,
       (gltf) => {
+        // File fully received — advance the completed-file counter then render 100%.
+        _lp.done++;
+        _lpUpdate(0);
         try { resolve(processLoadedModel(gltf.scene, opts)); }
         catch (e) { reject(e); }
       },
       (xhr) => {
-        if (xhr.total > 0) {
-          const pct = Math.round((xhr.loaded / xhr.total) * 100);
-          loadingBar.style.width = pct + '%';
-          loadingPercent.textContent = pct;
-        }
+        // xhr.total may be the compressed byte count; clamp ratio to [0, 1].
+        const ratio = xhr.total > 0 ? Math.min(1, xhr.loaded / xhr.total) : 0;
+        _lpUpdate(ratio);
       },
       (err) => reject(err)
     );
@@ -2679,6 +2695,10 @@ function updateHeroCopy() {
 // Preload every set up front, then activate set 0. Each set is built
 // inside its own try/catch so one bad set never stops the others.
 (async () => {
+  // Count total GLB files so the progress bar spans the full 0→100 range.
+  _lp.total = MODEL_SETS.reduce((n, s) => n + s.paths.length, 0);
+  _lp.done  = 0;
+
   const buildErrors = [];
   for (let i = 0; i < MODEL_SETS.length; i++) {
     try {

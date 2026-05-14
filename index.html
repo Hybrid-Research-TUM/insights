@@ -1,0 +1,3572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spatial Obstacles — Hybrid Workspace Study</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #ffffff;
+    --wire-color: #000000;
+    --wire-hover: #2979ff;
+    --accent: #2979ff;
+    --text: #1a1a1a;
+    --text-muted: #6b7a8d;
+    --panel-bg: rgba(255, 255, 255, 0.92);
+    --panel-border: rgba(0, 0, 0, 0.12);
+    --label-bg: rgba(255, 255, 255, 0.95);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  html, body { height: auto; min-height: 100%; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  /* Each model set gets a 400vh transparent scroll track.
+     The canvas is fixed behind it so the 3D scene stays visible
+     while the user scrolls through the track, then the following
+     article section covers the canvas naturally. */
+  .model-track {
+    position: relative;
+    height: 400vh;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .scroll-cue {
+    position: absolute;
+    bottom: 2.5rem;
+    left: 50%;
+    /* translateX(-50%) is baked into every scrollBob keyframe */
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: #6b7a8d;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    pointer-events: none;
+    animation: scrollBob 2.4s ease-in-out infinite;
+  }
+  .scroll-cue svg { width: 16px; height: 16px; stroke: #6b7a8d; }
+  @keyframes scrollBob {
+    0%, 100% { transform: translate(-50%, 0); }
+    50%      { transform: translate(-50%, 6px); }
+  }
+
+  /* ─── LOADING SCREEN ─── */
+  .loading-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    transition: opacity 0.6s ease, visibility 0.6s ease;
+  }
+
+  .loading-screen.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .loading-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--text-muted);
+    max-width: 400px;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  .loading-bar-track {
+    width: 200px;
+    height: 2px;
+    background: rgba(0,0,0,0.08);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+
+  .loading-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    box-shadow: none;
+    transition: width 0.15s linear;
+  }
+
+  .loading-percent {
+    font-family: 'Space Mono', monospace;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  /* ─── SCROLL SECTIONS ─── */
+  .scroll-container { position: relative; }
+
+  .section {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .section-content {
+    max-width: 520px;
+    padding: 3rem;
+    pointer-events: auto;
+  }
+
+  .section-content.left { margin-right: auto; margin-left: 5vw; }
+  .section-content.right { margin-left: auto; margin-right: 5vw; }
+  .section-content.center { margin: 0 auto; text-align: center; }
+
+  .section-content h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.6rem, 3.4vw, 2.6rem);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: 1rem;
+    color: #1a1a1a;
+  }
+
+  .section-content h2 span { color: var(--accent); }
+
+  .section-content p {
+    font-size: 1rem;
+    line-height: 1.7;
+    color: var(--text-muted);
+  }
+
+  .section-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+    display: block;
+  }
+
+  /* ─── HERO ─── */
+  .hero-section {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    position: relative;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .hero-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.4rem, 5.5vw, 4.6rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    color: #1a1a1a;
+    margin-bottom: 1rem;
+  }
+
+  .hero-title span { color: var(--accent); }
+
+  .hero-sub {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    max-width: 480px;
+    margin: 0 auto 2.5rem;
+    line-height: 1.6;
+  }
+
+  .scroll-hint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    animation: bobble 2s ease-in-out infinite;
+  }
+
+  .scroll-hint svg {
+    width: 20px;
+    height: 20px;
+    stroke: var(--accent);
+  }
+
+  @keyframes bobble {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(8px); }
+  }
+
+  /* ─── 3D CANVAS — fixed behind everything ─── */
+  #canvas-container {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 1;
+  }
+
+  #canvas-container canvas { display: block; }
+
+  /* ─── FLOATING SET LABEL ─── */
+  /* Replaces the old carousel arrows + dot indicator. Shows the
+     currently active set name + a mini progress bar so the user
+     knows where they are in the scrollytelling sequence. */
+  .set-label-float {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 1.1rem;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 999px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: #111;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: opacity 0.3s;
+  }
+  .label-total {
+    opacity: 0.4;
+    margin-left: 0.15em;
+  }
+  .set-label-progress {
+    width: 60px;
+    height: 3px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .set-label-progress-bar {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: #111;
+    border-radius: 999px;
+    transition: width 0.08s linear;
+  }
+
+  /* ─── ZONE LABEL TOOLTIP ─── */
+  .zone-label {
+    position: fixed;
+    pointer-events: none;
+    z-index: 100;
+    background: var(--label-bg);
+    border: 1px solid var(--accent);
+    padding: 0.6rem 1rem;
+    border-radius: 2px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.2s, transform 0.2s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .zone-label.visible { opacity: 1; transform: translateY(0); }
+
+  .zone-label::before {
+    content: '◆';
+    margin-right: 0.5em;
+    font-size: 0.5em;
+    vertical-align: middle;
+  }
+
+  /* ─── INFO PANEL (right-side overlay) ─── */
+  .info-panel {
+    position: fixed;
+    top: 50%;
+    right: 2rem;
+    transform: translateY(-50%) translateX(24px);
+    z-index: 50;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    padding: 2.4rem 2.2rem 2rem;
+    border-radius: 6px;
+    width: min(360px, 32vw);
+    max-height: 70vh;
+    overflow-y: auto;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.12),
+                0 2px 6px rgba(0, 0, 0, 0.04);
+  }
+
+  .info-panel.visible {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+    pointer-events: auto;
+  }
+
+  .info-panel .info-eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    margin-bottom: 0.6rem;
+    display: block;
+  }
+
+  .info-panel h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.7rem;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    color: #111;
+    margin-bottom: 1.1rem;
+  }
+
+  .info-panel .info-divider {
+    width: 36px;
+    height: 2px;
+    background: var(--accent);
+    margin-bottom: 1.1rem;
+  }
+
+  .info-panel .info-findings-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: #6b7a8d;
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+
+  .info-panel p {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.92rem;
+    color: #2c333d;
+    line-height: 1.7;
+  }
+
+  .info-panel .close-btn {
+    position: absolute;
+    top: 0.9rem; right: 1.1rem;
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: color 0.2s;
+  }
+  .info-panel .close-btn:hover { color: #111; }
+
+  /* ─── FIXED TITLE OVERLAY (left side) ─── */
+  .title-overlay {
+    position: fixed;
+    top: 50%;
+    left: 4vw;
+    transform: translateY(-50%);
+    z-index: 30;
+    max-width: 460px;
+    pointer-events: none;
+    /* Smooth fade-IN when the canvas reappears after an article section.
+       The fade-OUT is instant (transition:none on body.reading below) so
+       the overlay is guaranteed invisible before its text content swaps. */
+    transition: opacity 0.35s ease, transform 0.35s ease;
+  }
+  /* JS adds .reading to <body> whenever canvasCovered = true.
+     transition:none makes the hide INSTANT — no 0.35 s fade-out.
+     This guarantees the overlay is at opacity 0 before updateHeroCopy()
+     changes its innerHTML during the blind-spot phase.  When .reading is
+     later removed, the base transition (above) provides a smooth fade-in. */
+  body.reading .title-overlay {
+    opacity: 0;
+    transform: translateY(calc(-50% + 12px));
+    pointer-events: none;
+    transition: none;
+  }
+  /* ── WORKSPACE INDICATOR — inline orientation strip inside .title-overlay */
+  .workspace-indicator {
+    display: flex;
+    justify-content: flex-start;
+    align-items: baseline; /* anchor text to shared baseline as sizes shift */
+    gap: 0.9rem;
+    pointer-events: none;
+    margin-bottom: 1.25rem; /* breathing room above the h1 */
+  }
+  .wi-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem; /* JS overrides this every frame — value is fallback only */
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    /* font-size driven at 60fps by the animation loop — no CSS transition on it */
+    transition: opacity 0.4s ease, color 0.4s ease;
+    white-space: nowrap;
+  }
+  .wi-label.is-active {
+    color: var(--accent);
+  }
+  .wi-connector {
+    display: flex;
+    align-items: center;
+  }
+  .wi-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.18);
+    flex-shrink: 0;
+  }
+  .wi-line {
+    width: 48px;
+    height: 1px;
+    background: rgba(0, 0, 0, 0.12);
+  }
+
+  /* Hide the set-label pill during reading (instant-hide / smooth-reveal). */
+  body.reading .set-label-float {
+    opacity: 0;
+    pointer-events: none;
+    transition: none;
+  }
+
+  .title-overlay .title-eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 1rem;
+  }
+
+  .title-overlay h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.4rem, 5vw, 4.2rem);
+    font-weight: 600;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: #1a1a1a;
+    margin-bottom: 1.25rem;
+  }
+
+  .title-overlay h1 em {
+    font-style: italic;
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  .title-overlay p {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1rem;
+    line-height: 1.65;
+    color: #4a5560;
+    max-width: 380px;
+  }
+
+  /* ─── CONTROLS HINT ─── */
+  .controls-hint {
+    position: fixed;
+    bottom: 1.5rem; right: 1.5rem;
+    z-index: 20;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .controls-hint .key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    background: var(--bg, #ffffff);
+    border: 1px solid rgba(0,0,0,0.2);
+    border-radius: 3px;
+    font-size: 0.55rem;
+    color: var(--text);
+  }
+
+  /* ─── PROGRESS BAR ─── */
+  .scroll-progress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 2px;
+    background: var(--accent);
+    z-index: 200;
+    transition: width 0.1s linear;
+    box-shadow: none;
+  }
+
+  /* ─── NAV ─── */
+  .nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.2rem 2rem;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.9), transparent);
+  }
+
+  .nav-logo {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #1a1a1a;
+  }
+
+  .nav-logo span { color: var(--accent); }
+
+  .nav-links {
+    display: flex;
+    gap: 2rem;
+    list-style: none;
+  }
+
+  .nav-links a {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--accent); }
+
+  /* ─── DEBUG PANEL ─── */
+  .debug-panel {
+    position: fixed;
+    top: 4rem; left: 1rem;
+    z-index: 300;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 4px;
+    padding: 1rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    display: none;
+    min-width: 220px;
+  }
+
+  .debug-panel h4 {
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .debug-panel .obj-name {
+    padding: 0.2rem 0;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .debug-panel .obj-name.is-zone { color: var(--accent); }
+  .debug-panel .obj-name.is-zone::after { content: ' ← zone'; opacity: 0.5; }
+
+  /* ─── ARTICLE SECTION — full-screen opaque curtain ─── */
+  /*
+     z-index ladder:  canvas 1, model-track 2, bgOverlay 0,
+     title-overlay 30, set-label-float 60
+     → article must be ABOVE all of these to act as a true blocker.
+     nav (100) and scroll-progress (200) deliberately stay on top.
+  */
+  .article-section {
+    position: relative;
+    z-index: 70;
+    min-height: 120vh;       /* 120vh guarantees a blind-spot window: the article
+                                straddles the viewport for at least 20vh of scroll
+                                distance so the canvas swap is never seen */
+    width: 100%;
+    background: var(--bg);   /* solid fill, no gradient or peek-through */
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* text block vertically centred on any screen */
+    padding: 5rem 2rem;
+  }
+
+  .article-inner {
+    max-width: 720px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .article-eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 1.25rem;
+  }
+
+  .article-section h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 4.2vw, 3.4rem);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    color: #1a1a1a;
+    margin-bottom: 2rem;
+  }
+
+  .article-section h2 em {
+    font-style: italic;
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  .article-section h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 2.75rem 0 1rem;
+  }
+
+  .article-section p {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: #3a4450;
+    margin-bottom: 1.25rem;
+  }
+
+  .article-section .lede {
+    font-size: 1.2rem;
+    line-height: 1.7;
+    color: #2a3340;
+    margin-bottom: 2rem;
+  }
+
+  /* ── STATIC SECTION (methods, acknowledgments-style blocks) ───
+     Visually identical to .article-section but excluded from
+     querySelectorAll('.article-section') so it never shifts the
+     blind-spot model-swap indices.                               */
+  .static-section {
+    position: relative;
+    z-index: 70;
+    min-height: 120vh;       /* matches .article-section — guarantees a reliable blind-spot window */
+    width: 100%;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 5rem 2rem;
+  }
+  .static-section h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 4.2vw, 3.4rem);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    color: #1a1a1a;
+    margin-bottom: 2rem;
+  }
+  .static-section h2 em {
+    font-style: italic;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  .static-section p {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: #3a4450;
+    margin-bottom: 1.25rem;
+  }
+  .static-section .lede {
+    font-size: 1.15rem;
+    line-height: 1.7;
+    color: #2a3340;
+    margin-bottom: 2rem;
+  }
+
+  /* ── BARRIER ROADMAP LIST (bridge section) ──────────────────────── */
+  .barrier-list {
+    list-style: none;
+    padding: 0;
+    margin: 2.5rem 0 0;
+  }
+  .barrier-list li {
+    display: flex;
+    gap: 1.25rem;
+    align-items: flex-start;
+    padding: 1.1rem 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+  }
+  .barrier-list li:last-child {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  }
+  .barrier-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    flex-shrink: 0;
+    width: 2rem;
+    padding-top: 0.3em;
+  }
+  .barrier-body strong {
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+  .barrier-body span {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+
+  /* ── INTRO CURTAIN — full-screen editorial title page ──────────
+     Covers the 3D canvas completely on load. Same z-index as
+     article sections so it sits above every fixed overlay.
+     Excluded from articleSections querySelectorAll — scroll
+     logic handles it via a dedicated introCurtainEl check.      */
+  .intro-curtain {
+    position: relative;
+    z-index: 70;
+    min-height: 100vh;
+    width: 100%;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 5rem 2rem 6rem; /* bottom pad makes room for the scroll cue */
+  }
+  .intro-curtain__inner {
+    max-width: 760px;
+    width: 100%;
+    text-align: center;
+  }
+  .intro-curtain__eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 2rem;
+  }
+  .intro-curtain__title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.6rem, 6vw, 5rem);
+    font-weight: 600;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    margin-bottom: 1.75rem;
+  }
+  .intro-curtain__title em {
+    font-style: italic;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  /* Hook paragraph — sits between title and divider */
+  .intro-curtain__hook {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.1rem;
+    line-height: 1.65;
+    color: var(--text-muted);
+    max-width: 540px;
+    margin: 0 auto 2rem;
+  }
+  .intro-curtain__divider {
+    width: 60px;
+    height: 2px;
+    background: var(--accent);
+    margin: 0 auto 2.5rem;
+  }
+  /* Stats grid — 3 equal columns separated by hairline rules */
+  .intro-curtain__stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin: 0 0 2.5rem;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  }
+  .intro-curtain__stat {
+    padding: 2rem 1.5rem;
+    text-align: center;
+  }
+  .intro-curtain__stat:not(:last-child) {
+    border-right: 1px solid rgba(0, 0, 0, 0.1);
+  }
+  .intro-curtain__stat-number {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(3rem, 6vw, 4.5rem);
+    font-weight: 600;
+    color: var(--text);
+    display: block;
+    line-height: 1;
+    margin-bottom: 0.6rem;
+  }
+  .intro-curtain__stat-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text);
+    display: block;
+    margin-bottom: 0.4rem;
+  }
+  .intro-curtain__stat-sublabel {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+  }
+  /* Methodology note — italic closing line after stats */
+  .intro-curtain__method {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.7;
+    color: var(--text-muted);
+    max-width: 540px;
+    margin: 0 auto;
+    font-style: italic;
+  }
+  /* Scroll cue — pinned to the absolute bottom of the curtain */
+  .intro-curtain__scroll {
+    position: absolute;
+    bottom: 2.5rem;
+    left: 50%;
+    /* translateX(-50%) baked into scrollBob keyframes */
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    pointer-events: none;
+    animation: scrollBob 2.4s ease-in-out infinite;
+  }
+  .intro-curtain__scroll svg {
+    width: 16px;
+    height: 16px;
+    stroke: var(--text-muted);
+  }
+  @media (max-width: 768px) {
+    .intro-curtain { padding: 4rem 1.5rem 5rem; }
+    .intro-curtain__stat { padding: 1.5rem 1rem; }
+  }
+  @media (max-width: 540px) {
+    .intro-curtain__stats {
+      grid-template-columns: 1fr;
+    }
+    .intro-curtain__stat:not(:last-child) {
+      border-right: none;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+  }
+
+  .article-divider {
+    width: 60px;
+    height: 2px;
+    background: var(--accent);
+    margin: 2.5rem 0;
+  }
+
+  /* ── CONCLUSION IMAGE ─────────────────────────────────────────── */
+  .article-image {
+    display: block;
+    width: 100%;          /* fill the .article-inner column */
+    max-width: 100%;      /* never overflow */
+    height: auto;         /* preserve aspect ratio */
+    margin: 2.5rem 0;     /* same vertical rhythm as .article-divider */
+    border-radius: 2px;   /* matches the subtle rounding used elsewhere */
+  }
+
+  /* ── SITE FOOTER ─────────────────────────────────────────────── */
+  .site-footer {
+    position: relative;
+    z-index: 70;                    /* same level as article sections — hides canvas */
+    background: var(--bg);
+    border-top: 1px solid var(--panel-border);
+    padding: 5rem 2rem 4.5rem;
+    width: 100%;
+  }
+
+  .site-footer__inner {
+    max-width: 720px;               /* aligns with .article-inner column */
+    margin: 0 auto;
+  }
+
+  /* Eyebrow label — identical rules to .article-eyebrow */
+  .site-footer__eyebrow {
+    display: block;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--accent);
+    margin-bottom: 2rem;
+  }
+
+  /* Two-column row: org+address left, copyright right */
+  .site-footer__body {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;          /* copyright sits at baseline of left column */
+    gap: 3rem;
+  }
+
+  /* Institution name — matches article h3 style */
+  .site-footer__org {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.6rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--text);
+    margin: 0 0 0.65rem;
+  }
+
+  .site-footer__address {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  /* Copyright — right-aligned, same tiny mono as progress bar */
+  .site-footer__copy {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--text-muted);
+    text-align: right;
+    white-space: nowrap;
+    line-height: 1.9;
+    flex-shrink: 0;
+    margin: 0;
+    opacity: 0.65;
+  }
+
+  .site-footer__thesis-link {
+    display: inline-block;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--accent);
+    text-decoration: none;
+    margin-top: 0.75rem;
+    transition: opacity 0.2s ease;
+  }
+  .site-footer__thesis-link:hover {
+    opacity: 0.7;
+  }
+
+  @media (max-width: 768px) {
+    .site-footer { padding: 3.5rem 1.5rem 3.5rem; }
+    .site-footer__body { flex-direction: column; align-items: flex-start; gap: 2rem; }
+    .site-footer__copy { text-align: left; white-space: normal; }
+    .site-footer__org { font-size: 1.3rem; }
+  }
+
+  @media (max-width: 768px) {
+    .section-content.left,
+    .section-content.right { margin: 0 auto; padding: 2rem; }
+    .nav-links { display: none; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     NAV ACTIVE STATE — highlight the current view
+     ════════════════════════════════════════════════════════════════ */
+  .nav-links a.active {
+    color: var(--accent);
+    position: relative;
+  }
+  .nav-links a.active::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: -6px;
+    height: 1px;
+    background: var(--accent);
+  }
+
+</style>
+</head>
+<body>
+
+<!-- LOADING SCREEN -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="loading-percent" id="loadingPercent">0</div>
+  <div class="loading-bar-track">
+    <div class="loading-bar-fill" id="loadingBar"></div>
+  </div>
+  <div class="loading-text" id="loadingText">Loading model&hellip;</div>
+</div>
+
+<nav class="nav">
+  <div class="nav-logo"><span>&#9670;</span> Spatial Obstacles</div>
+  <ul class="nav-links">
+    <li><a href="#" id="navViewer"   class="active">Viewer</a></li>
+    <li><a href="#" id="navInsights">Insights</a></li>
+  </ul>
+</nav>
+
+<div class="zone-label" id="zoneLabel"></div>
+
+<aside class="info-panel" id="infoPanel" aria-live="polite">
+  <button class="close-btn" id="closePanel" aria-label="Close">&times;</button>
+  <span class="info-eyebrow">Selected Zone</span>
+  <h3 id="infoPanelTitle">Zone</h3>
+  <div class="info-divider"></div>
+  <span class="info-findings-label">Key Findings</span>
+  <p id="infoPanelDesc">Description</p>
+</aside>
+
+<div class="debug-panel" id="debugPanel">
+  <h4>Objects in model</h4>
+  <div id="debugList"></div>
+</div>
+
+<div class="controls-hint">
+  <span class="key">&#x2193;</span> scroll down to explore
+  &nbsp;|&nbsp;
+  click zone to inspect
+</div>
+
+<!-- Fixed 3D canvas — sits at z-index 1 behind all page content -->
+<div id="canvas-container"></div>
+
+<!-- Fixed UI overlays — always visible above the canvas -->
+<div class="set-label-float" id="setLabelFloat">
+  <span class="label" id="setLabelFloatText">Theme 1</span><span class="label-total" id="setLabelTotal"></span>
+  <span class="set-label-progress"><span class="set-label-progress-bar" id="setProgressBar"></span></span>
+</div>
+
+<div class="title-overlay">
+  <div class="workspace-indicator" id="workspaceIndicator">
+    <span class="wi-label" id="wiHome">Home Workspace</span>
+    <span class="wi-connector" aria-hidden="true">
+      <span class="wi-dot"></span>
+      <span class="wi-line"></span>
+      <span class="wi-dot"></span>
+    </span>
+    <span class="wi-label" id="wiCorp">Corporate Workspace</span>
+  </div>
+  <h1 id="heroTitle">Discover the<br/><em>Corporate Workspace</em></h1>
+  <p id="heroDesc">Explore the home and corporate workstations of hybrid workers. Click objects to see how standardized design creates friction — and how workers adapt.</p>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     INTRO CURTAIN — full-screen editorial opener.
+     Uses its own class (not .article-section) to avoid shifting
+     the blind-spot model-swap indices in updateScrollCamera.
+     JS handles it as a Priority 2b check in readScroll().
+     ════════════════════════════════════════════════════════════════ -->
+<section class="intro-curtain" id="introCurtain">
+  <div class="intro-curtain__inner">
+    <span class="intro-curtain__eyebrow">Hybrid Workspace Study</span>
+    <h1 class="intro-curtain__title">Spatial Rejection<br/>in <em>Hybrid Workspaces</em></h1>
+    <p class="intro-curtain__hook">A qualitative study of how knowledge workers experience, adapt to, and move between corporate and home environments.</p>
+    <div class="intro-curtain__divider"></div>
+
+    <div class="intro-curtain__stats">
+      <div class="intro-curtain__stat">
+        <span class="intro-curtain__stat-number">6</span>
+        <span class="intro-curtain__stat-label">Continents</span>
+        <span class="intro-curtain__stat-sublabel">where participants live and work</span>
+      </div>
+      <div class="intro-curtain__stat">
+        <span class="intro-curtain__stat-number">189</span>
+        <span class="intro-curtain__stat-label">Photographs</span>
+        <span class="intro-curtain__stat-sublabel">of desks, submitted by participants</span>
+      </div>
+      <div class="intro-curtain__stat">
+        <span class="intro-curtain__stat-number">1278</span>
+        <span class="intro-curtain__stat-label">Minutes of Interview</span>
+        <span class="intro-curtain__stat-sublabel">thematically coded</span>
+      </div>
+    </div>
+
+    <p class="intro-curtain__method">From photographs and first-hand accounts, recurring spatial conditions were identified, abstracted into composite 3D models, and analyzed across four thematic barriers.</p>
+  </div>
+
+  <div class="intro-curtain__scroll">
+    Scroll to explore the overview
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════
+     BRIDGE SECTION — roadmap curtain between intro and first model.
+     Uses .static-section (not .article-section) so it is excluded
+     from the articleSections[] array and never shifts blind-spot
+     indices.  readScroll() detects it via Priority 2c (bridgeSectionEl).
+     ════════════════════════════════════════════════════════════════ -->
+<section class="static-section" id="bridgeSection">
+  <div class="article-inner">
+    <span class="article-eyebrow">Four Cascading Barriers</span>
+    <p class="lede">This study traces four compounding barriers across the hybrid workspace — physical, spatial, operational, and behavioral. Each section pairs an archetypal corporate workstation with a home desk: spatial arguments assembled from recurring patterns across participants, not portraits of any one worker.</p>
+    <ol class="barrier-list">
+      <li>
+        <span class="barrier-num">I</span>
+        <div class="barrier-body">
+          <strong>Bodily Rejection of the Averaged Office</strong>
+          <span>Physical barriers: how ergonomic and sensory conditions differ between the standardized corporate environment and the individually configured home workspace.</span>
+        </div>
+      </li>
+      <li>
+        <span class="barrier-num">II</span>
+        <div class="barrier-body">
+          <strong>The Limits of Individualization</strong>
+          <span>Spatial barriers: how organizational policy and domestic circumstance differently shape the personalization and permanence available at each desk.</span>
+        </div>
+      </li>
+      <li>
+        <span class="barrier-num">III</span>
+        <div class="barrier-body">
+          <strong>Transitional Load &amp; Setup Friction</strong>
+          <span>Operational barriers: the transitional costs and interruptions structuring the corporate working day, compared with the continuity conditions of the home environment.</span>
+        </div>
+      </li>
+      <li>
+        <span class="barrier-num">IV</span>
+        <div class="barrier-body">
+          <strong>Surveillance Culture &amp; Micromanagement</strong>
+          <span>Behavioral barriers: the visibility the open floor plan demands, and its equivalent at home through a webcam.</span>
+        </div>
+      </li>
+    </ol>
+  </div>
+  <div class="scroll-cue">
+    Scroll to explore the four barriers
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+  </div>
+</section>
+
+<!-- ── SET 0 — Bodily Rejection of the Averaged Office ── -->
+<div class="model-track" data-index="0"></div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     ARTICLE SECTION 0 — Bodily Rejection of the Averaged Office
+     ════════════════════════════════════════════════════════════════ -->
+<section class="article-section" id="article-0">
+  <div class="article-inner">
+    <span class="article-eyebrow">Barrier Layer I</span>
+    <h2>Bodily Rejection of<br/>the <em>Averaged Office</em></h2>
+
+    <p class="lede">
+      The two desks make the gap concrete: one surface shaped over time by a person with a body, one configured once and left to run.
+    </p>
+
+    <div class="article-divider"></div>
+
+    <p>
+      Standardized office furniture is not an oversight. It is a deliberate design position: uniformity achieved at scale, calibrated to a statistical median and applied universally regardless of what that median fails to capture. The discomfort it produces is distributed the same way — averaged across a population, and therefore concentrated at the extremes. Workers at both ends described the same trajectory: tolerating the mismatch, adjusting posture incrementally, absorbing the accumulated strain into the working day as a background condition rather than an active problem.
+    </p>
+
+    <p>
+      The adaptive impulse is present at the office too. Workers described reaching for fixes: a cushion, a footrest, a personal lamp carried in from home. What the office governs is whether those fixes are permitted to stay. A correction that cannot be stored overnight cannot be maintained long-term. One that draws attention tends to be abandoned. The home desk accumulates adaptations because no institutional logic prevents them. The same adaptations applied to a shared surface become an act of negotiation with an environment that was not designed to hold them.
+    </p>
+
+    <p>
+      What the two environments differ on is the corrective response that follows discomfort. At the office, the impulse tends to stop at the point where the correction would have to become visible. Over time, the body adjusts its expectations.
+    </p>
+  </div>
+</section>
+
+<!-- ── SET 1 — The Limits of Individualization ── -->
+<div class="model-track" data-index="1"></div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     ARTICLE SECTION 1 — The Limits of Individualization
+     ════════════════════════════════════════════════════════════════ -->
+<section class="article-section" id="article-1">
+  <div class="article-inner">
+    <span class="article-eyebrow">Barrier Layer II</span>
+    <h2>The Limits of<br/><em>Individualization</em></h2>
+
+    <p class="lede">
+      The home desk in this model is not a better-designed workspace. It is a workspace that has been inhabited: accumulated rather than assigned, marked rather than cleared.
+    </p>
+
+    <div class="article-divider"></div>
+
+    <p>
+      Analysis of home workspace data identified five distinct functions that personal objects perform: emotional anchoring, behavioral scaffolding, sensory management, psychological self-regulation, and affirmation of professional identity. These are not decorative categories. A crossed-out wall calendar regulates attention. A plant at screen level manages sensory fatigue. An object left on the surface by someone who matters anchors the day to something beyond the immediate task. Workers described these as operational infrastructure — components of a support system built incrementally and maintained at low cost, because the surface retains whatever is placed on it.
+    </p>
+
+    <p>
+      In the corporate office, the same workers described a different calculation. The effort of carrying items in and out. The risk of loss on a surface shared with strangers. The anticipatory audit of how a personal object might read to a senior colleague. The result is a gradual withdrawal: workers stop bringing anything that matters, which means they stop bringing the things that help. The cleared desk is the product of a rational response to an environment that offers no reliable return on spatial investment.
+    </p>
+
+    <p>
+      The functional loss is real, even when it is difficult to articulate. Workers at the office described managing attention, affect, and motivation without the environmental support they rely on at home — and doing so invisibly, because the depletion is gradual enough that it rarely presents itself as a workplace problem. It tends to present itself as a preference for working somewhere else.
+    </p>
+  </div>
+</section>
+
+<!-- ── SET 2 — Transitional Load & Setup Friction ── -->
+<div class="model-track" data-index="2"></div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     ARTICLE SECTION 2 — Transitional Load & Setup Friction
+     ════════════════════════════════════════════════════════════════ -->
+<section class="article-section" id="article-2">
+  <div class="article-inner">
+    <span class="article-eyebrow">Barrier Layer III</span>
+    <h2>Transitional Load<br/>&amp; <em>Setup Friction</em></h2>
+
+    <p class="lede">
+      The two desks in this model are less about what they contain and more about where they begin. One picks up where the previous day ended. The other starts from scratch, every morning.
+    </p>
+
+    <div class="article-divider"></div>
+
+    <p>
+      Workers do not evaluate the office against an abstract ideal. They evaluate it against the concrete operational platform they have been using every other day: the home environment. That baseline carries three structural advantages the office cannot easily match — material permanence, disturbance-free working conditions, and temporal self-regulation. Each morning, the comparison is made again. Not through deliberate calculation, but through the body's experience of the transition: the bag packed the night before, the setup rebuilt from a generic starting point, the rhythm dismantled before it has properly formed.
+    </p>
+
+    <p>
+      The commute is a cognitive state as much as a physical one: a period that belongs neither to rest nor to work, and that has to be recovered from before the first task can begin. The setup sequence that follows compounds this. Each cable reconnected and monitor readjusted is individually minor. Together, they consume the window of the day when focus is sharpest. The interruptions that arrive before the setup is complete begin the process again.
+    </p>
+
+    <p>
+      The office visit is not rejected in a single decision. It is eroded across many small ones. Each day that the friction of attendance consistently outweighs the return shifts the calculation slightly. The pattern becomes behavioral before it becomes conscious: fewer visits, shorter stays, a growing preference for the environment that simply starts.
+    </p>
+  </div>
+</section>
+
+<!-- ── SET 3 — Surveillance Culture & Micromanagement ── -->
+<div class="model-track" data-index="3"></div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     ARTICLE SECTION 3 — Surveillance Culture & Micromanagement
+     ════════════════════════════════════════════════════════════════ -->
+<section class="article-section" id="article-3">
+  <div class="article-inner">
+    <span class="article-eyebrow">Barrier Layer IV</span>
+    <h2>Surveillance Culture<br/>&amp; <em>Micromanagement</em></h2>
+
+    <p class="lede">
+      The two desks in this model are defined less by their objects than by their sight lines. One is open to observation from every direction. The other has a frame.
+    </p>
+
+    <div class="article-divider"></div>
+
+    <p>
+      The open floor plan does not require active surveillance to produce its behavioral effects. It requires only the structural possibility of being observed: a desk that faces outward, a walkway behind it, a manager who might pass at any moment. Workers described a continuous layer of self-monitoring maintained throughout the day: a browser tab angled toward work content before someone approaches, a break timed to a lull in floor activity, a posture corrected for a colleague's peripheral glance. None of these are dramatic gestures. They are largely automatic, invisible to the workers themselves as much as to anyone else. Their cost is real, and diffuse.
+    </p>
+
+    <p>
+      The home desk does not dissolve the visibility problem. The webcam introduces its own version: a managed rectangle, a background made legible for colleagues, a frame that requires deliberate decisions about what appears within it. Workers described positioning objects just outside the camera's edge, dressing differently above and below the frame, arranging the visible background for calls rather than for use. The difference between corporate and domestic visibility lies in the degree to which the worker can author what is seen: at the office, the architecture decides. At home, the worker sets the frame.
+    </p>
+
+    <p>
+      What both environments share is the structural fact of being observed — differently, by different audiences, under different conditions. The question of how to inhabit a workspace without performing it does not disappear when the worker goes home. It shifts form. The frame, at least, has edges.
+    </p>
+
+    <div class="article-divider"></div>
+
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════
+     CONCLUSION — Cascading Model summary
+     ════════════════════════════════════════════════════════════════ -->
+<section class="article-section" id="article-conclusion">
+  <div class="article-inner">
+    <span class="article-eyebrow">Cascading Model</span>
+    <!-- Heading options considered:
+         <h2>The Cascading Model<br/>of <em>Spatial Rejection</em></h2>
+         <h2>Four Barriers,<br/><em>One Exit</em></h2>
+    -->
+    <h2>Four Barriers,<br/><em>One System</em></h2>
+
+    <p class="lede">Four separate conditions, each examined in isolation across eight archetypal desks. What the model proposes is what their simultaneous presence produces: a configuration where each layer of constraint forecloses the compensatory response that the layer before it naturally provokes.</p>
+
+    <p>Taken individually, each barrier identifies a distinct domain of autonomy that some corporate environments remove. The first forecloses environmental autonomy: the capacity to calibrate sensory and physical conditions to one's own physiological needs. The second forecloses spatial autonomy: the capacity to invest in, anchor, and individualize a workstation as personal territory. The third forecloses operational autonomy: the capacity to govern the pace and continuity of the working day. The fourth forecloses behavioral autonomy: the capacity to regulate one's own body and affect without institutional scrutiny. Separately, each represents a design failure. Together, they represent a system.</p>
+
+    <p>The system's particular character is that each barrier forecloses the compensatory response that the previous one naturally provokes. A worker experiencing ergonomic mismatch reaches for a corrective object. The second barrier removes the conditions under which that object can be stored or reliably retained. A worker who accepts carrying the object daily absorbs a compounding logistical cost. The third barrier makes that cost, over time, structurally unsustainable. A worker who manages all three finds that the postural adjustments still available as last-resort relief become inadmissible under the fourth barrier's surveillant conditions. The cascade does not add friction. It targets exits.</p>
+
+    <div class="article-divider"></div>
+
+    <img
+      class="article-image"
+      src="./swiss_cheese.png"
+      alt="Swiss Cheese cascading model diagram"
+      loading="lazy"
+    />
+
+    <p>The diagram maps this logic visually, adapted from Reason's Swiss Cheese Model of systemic failure. Each layer represents a barrier that workers can, and often do, surmount individually. The analytical finding is the systematic elimination of every available compensatory path. Workers do not stop trying. They exhaust the options.</p>
+
+    <p>Workers who withdraw to the home environment encounter the same four barrier domains in analog form. The ergonomic fit is often imperfect, the sensory environment is not always adequate, domestic interruptions occur, and the webcam creates its own form of managed visibility. The home is not a spatially superior environment. The relevant structural difference is that its barriers tend not to co-activate. A worker experiencing ergonomic discomfort at home retains environmental and behavioral autonomy to address it. A worker whose domestic routine is interrupted retains the spatial permanence and operational continuity to recover. Because the barriers remain isolated, compensatory strategies remain available. Partial barriers produce adaptation. Aligned barriers produce spatial rejection.</p>
+
+    <p>The data also surfaced a consistent parallel finding about the home environment. Participants did not describe it as an uncomplicated solution. Motivational deficits emerged in the absence of institutional rhythm, domestic boundaries eroded across long uninterrupted stretches of remote work, and webcam visibility introduced performative demands of its own. These are real structural costs, present across the sample with enough regularity to constitute a pattern. What the data distinguish is the degree to which home barriers remain individually addressable rather than simultaneously aligned. A worker experiencing ergonomic discomfort at home retains the spatial and behavioral autonomy to respond to it. The same worker in the corporate office does not. The study's contribution is to trace that structural difference, and to identify the conditions under which spatial rejection becomes a rational outcome. Whether those conditions can be changed is a question the findings frame, but do not resolve. That work belongs to the practitioners and institutions who design these environments.</p>
+
+  </div>
+</section>
+
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <span class="site-footer__eyebrow">Chair of Integrated Product Design</span>
+    <div class="site-footer__body">
+      <div class="site-footer__left">
+        <h3 class="site-footer__org">TUM School of<br>Engineering and Design</h3>
+        <p class="site-footer__address">Arcisstr. 21, 80333 Munich, Germany</p>
+      </div>
+      <p class="site-footer__copy">&copy; 2026<br>All Rights Reserved.</p>
+    </div>
+  </div>
+</footer>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     THREE.JS
+     Loads ./model.glb from the same folder as this HTML file.
+
+     SETUP:
+       1. Put this file + model.glb in the same folder
+       2. Run: npx serve .
+       3. Open http://localhost:3000
+
+     CUSTOMIZATION:
+       - Edit MODEL_PATH to change the file name
+       - Edit EDGE_ANGLE_THRESHOLD to show more/fewer edges
+       - Edit zoneData to set custom titles & descriptions
+       - Set AUTO_ZONES = false if you only want manually listed zones
+       - Add ?debug to the URL to see all object names on screen
+     ════════════════════════════════════════════════════════════════ -->
+<script src="https://unpkg.com/gsap@3.12.5/dist/gsap.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ┌─────────────────────────────────────────────────┐
+// │  CONFIG — EDIT THESE                            │
+// └─────────────────────────────────────────────────┘
+
+// Each entry is one "set" the user can cycle through with the arrows.
+// A set is a pair of .glb files (left desk + right desk) that share a
+// camera arc. Add more sets by pushing more pairs into this array.
+const MODEL_SETS = [
+  { label: 'Theme 1', paths: ['./model.glb',  './model2.glb'], targetYBias: 0.7 },
+  { label: 'Theme 2', paths: ['./model3.glb', './model4.glb'], targetYBias: 0.9 },
+  { label: 'Theme 3', paths: ['./model5.glb', './model6.glb'], targetYBias: 0.5, arcXBias: -0.9 },
+  { label: 'Theme 4', paths: ['./model7.glb', './model8.glb'], targetYBias: 0.6 },
+];
+// Kept for back-compat with log/debug code that referenced these names.
+const MODEL_PATH  = MODEL_SETS[0].paths[0];
+const MODEL2_PATH = MODEL_SETS[0].paths[1];
+
+// ┌─────────────────────────────────────────────────┐
+// │  PART ANIMATIONS — per-object click motion      │
+// │                                                 │
+// │  Edit these to change how each named .glb part  │
+// │  moves when clicked. Default = no movement.     │
+// │                                                 │
+// │  axis: 'x' | 'y' | 'z'   (LOCAL axis of part)   │
+// │  distance: number (in local units, may be neg.) │
+// │                                                 │
+// │  Two ways to map names → animations:            │
+// │   1. PART_ANIMATIONS — exact .name match        │
+// │   2. PART_ANIMATION_PATTERNS — regex match      │
+// │                                                 │
+// │  If a part has no entry, it does not move.      │
+// └─────────────────────────────────────────────────┘
+const PART_ANIMATIONS = {
+  // Exact-name examples — replace with your real .glb node names:
+  // 'Main_Table':      { axis: 'y', distance: 0    },   // explicit no-move
+  // 'Drawer_Top':      { axis: 'x', distance: 0.6  },
+  // 'Drawer_Bottom':   { axis: 'x', distance: 0.6  },
+  // 'Chair_Left':      { axis: 'z', distance: 0.5  },
+};
+
+const PART_ANIMATION_PATTERNS = [
+  // Regex examples — match many parts at once:
+  // { match: /^drawer/i,       axis: 'x', distance: 0.6 },
+  // { match: /chair/i,         axis: 'z', distance: 0.5 },
+  // { match: /^main[_ ]?table/i, axis: 'y', distance: 0 },
+];
+
+const DEFAULT_PART_ANIMATION = { axis: 'y', distance: 0 };
+
+function getAnimationFor(name) {
+  if (name && PART_ANIMATIONS[name]) return PART_ANIMATIONS[name];
+  if (name) {
+    for (let i = 0; i < PART_ANIMATION_PATTERNS.length; i++) {
+      const p = PART_ANIMATION_PATTERNS[i];
+      if (p.match.test(name)) return { axis: p.axis, distance: p.distance };
+    }
+  }
+  return DEFAULT_PART_ANIMATION;
+}
+
+// Edge angle threshold in degrees.
+// Higher = cleaner (fewer edges). Lower = more detail.
+// Use 5–10 to catch gentle curves (wheels, chair backs, soft shells).
+// Try 15–25 for architecture. 30+ for organic meshes.
+const EDGE_ANGLE_THRESHOLD = 10;
+
+// When true, every named mesh in the model becomes a clickable zone.
+// When false, only objects listed in zoneData below are clickable.
+const AUTO_ZONES = true;
+
+// ┌─────────────────────────────────────────────────┐
+// │  ZONE DATA                                      │
+// │                                                 │
+// │  Keys must match object names in your .glb.     │
+// │  To find the names:                             │
+// │    • Open browser console (F12) after loading   │
+// │    • Or add ?debug to the URL                   │
+// │                                                 │
+// │  If AUTO_ZONES is true, any mesh with a name    │
+// │  not listed here gets a default title/desc.     │
+// │  You can override any of them by adding an      │
+// │  entry below.                                   │
+// └─────────────────────────────────────────────────┘
+// ─────────────────────────────────────────────────────────────
+// ZONE DATA
+// Keys match the exact SetX_Y object names exported from Blender.
+// title — shown in the floating label and info-panel header.
+// desc  — shown in the info-panel body text.
+// ─────────────────────────────────────────────────────────────
+
+const zoneData = {
+
+
+
+  // ── BARRIER I — Bodily Rejection of the Averaged Office ──────────────────
+
+
+
+  'Set1_1': {
+
+    title: 'The Standardized Chair',
+
+    desc:  `Adjustable within a range established by someone else's research. The footrest deploys, the lumbar shifts — but the outer limits of adjustment were calibrated to a statistical median, not a real body. Workers at both ends of the height range described the same outcome: a chair that got close, then stopped. The fix they needed was outside what the dial could reach.`,
+
+  },
+
+
+
+  'Set1_2': {
+
+    title: 'The Fixed Desk',
+
+    desc:  `Set at one height, oriented in one direction, identical to every other surface on the floor. Workers described the desk as neutral in a way that felt faintly hostile: it offered nothing beyond the minimum required for occupancy. A surface to work on, and little else.`,
+
+  },
+
+
+
+  'Set1_3': {
+
+    title: 'Averaged Senses',
+
+    desc:  `One thermostat, one lighting circuit, one ventilation schedule. Workers described reaching for controls that were not there: a dimmer that did not exist, a vent that could not be redirected. The sensory environment of the open floor is an infrastructure decision made above the level of any individual user. Adjusting it means adjusting it for everyone simultaneously, which is another way of saying it rarely gets adjusted at all.`,
+
+  },
+
+
+
+  'Set2_1': {
+
+    title: 'Ergonomic Improvisation',
+
+    desc:  `At home, the body negotiates directly with the furniture rather than through policy. A footstool closes the gap the chair's height range could not. A stack of books raises the monitor to where the neck actually needs it. Workers described these as ordinary spatial behavior: small decisions made in response to actual discomfort, accumulated over time into a setup that fits one body precisely, however inelegant it looks.`,
+
+  },
+
+
+
+  'Set2_2': {
+
+    title: 'The Accumulated Desk',
+
+    desc:  `A stack of books under the monitor. A wooden plank where a proper riser would go. The home desk accumulates practical solutions in whatever form they arrive, at whatever cost makes sense for one person. Workers described a surface that adapted over time through a series of small decisions made in response to actual discomfort. The result is often inelegant. It is also precisely fitted.`,
+
+  },
+
+
+
+  'Set2_3': {
+
+    title: 'Granular Sensory Control',
+
+    desc:  `A lamp angled to light only the working surface. A candle for the scent. A speaker tuned to the right sound for the task. In winter, the whole desk migrates closer to the radiator. Workers described assembling a sensory environment through small, individual decisions: each element chosen for one person's thresholds, adjustable by that person alone.`,
+
+  },
+
+
+
+
+
+  // ── BARRIER II — The Limits of Individualization ─────────────────────────
+
+
+
+  'Set3_1': {
+
+    title: 'The Shared Desk',
+
+    desc:  `Reserved each morning through an app, surrendered each evening. No claim carries over from one day to the next: not a preference for the window seat, not proximity to a particular colleague, not muscle memory of which drawer is which. Workers described developing routines around the desk's impermanence: arriving early to secure a preferred position, avoiding desks near high-traffic routes. The spatial negotiation begins before the work does.`,
+
+  },
+
+
+
+  'Set3_2': {
+
+    title: 'The Cleared Surface',
+
+    desc:  `The policy is framed as hygiene. Its effect is legibility. Workers described performing their own version of the clear-desk audit before anyone had to ask: removing objects preemptively, calibrating what remained against how it might read to a passing manager. The desk becomes a signal of productive presence as much as a working surface. What stays is not what helps most. It is what communicates the right things.`,
+
+  },
+
+
+
+  'Set3_3': {
+
+    title: 'The Storage Hierarchy',
+
+    desc:  `Storage is technically available: a coat hook, a locker, a shared shelf with some semi-permanent occupants already claiming the better half. Hybrid workers, present fewer days and invested in less institutional territory, tend to sit at the end of this hierarchy. Workers described the cost of storage scarcity through the daily calculus it imposed before every office visit: what to bring, what to leave, what could survive a night unattended.`,
+
+  },
+
+
+
+  'Set3_4': {
+
+    title: 'The Vanishing Personal Item',
+
+    desc:  `A keyboard left on a desk overnight is not missing the next morning: it has been relocated, borrowed, or absorbed into someone else's setup. Some workers described this as a structural feature of the shared workspace, where objects without a claim attached to them are simply available. After enough small losses, people stop bringing anything with sentimental or financial weight.`,
+
+  },
+
+
+
+  'Set4_1': {
+
+    title: 'Curated but Constrained',
+
+    desc:  `The home desk is chosen, but the space it occupies is negotiated. Workers without a dedicated room described an ongoing set of compromises: a monitor angled away from the bedroom visible on calls, a standing desk folded flat before dinner, a chair returned to the dining table before a partner arrives home. Where the office imposes institutional limits, the home imposes spatial and domestic ones. The desk is more personal, though rarely entirely the worker's own.`,
+
+  },
+
+
+
+  'Set4_2': {
+
+    title: 'Territorial Markers',
+
+    desc:  `A postcard from a trip taken years ago. A small figure given by a colleague on the last day at a previous job. Objects that have nothing to do with the work and everything to do with why the work matters. Workers described these items as performing a kind of spatial claim: converting a generic surface into a specific one, anchoring the working day to a life that extends beyond it. The same objects, brought into the corporate office, became inadmissible: too personal, too fragile, too visible in the wrong way.`,
+
+  },
+
+
+
+  'Set4_3': {
+
+    title: 'Behavioral Scaffolding',
+
+    desc:  `A wall calendar with days crossed out. A small timer set to focus intervals. A handwritten checklist that gets rewritten when the list itself becomes demotivating. Workers described these as externalized cognition: tools that do the structural work of attention so the mind does not have to hold it alone. In the corporate office, the same objects read differently: too informal, too conspicuous, too much of a signal that the worker needs help staying on task. They tend to stay home.`,
+
+  },
+
+
+
+  'Set4_4': {
+
+    title: 'Sensory Infrastructure',
+
+    desc:  `A rug that makes barefoot working viable in winter. A plant at screen level that softens the transition between looking at text and looking away from it. Workers described these as regulatory choices: things that calibrate the ambient conditions of a room rather than its appearance. Their value is difficult to articulate to anyone who has not noticed their absence. In the corporate office, they rarely survive the gap between intention and execution: too soft for the aesthetic, too personal for the shared surface.`,
+
+  },
+
+
+
+
+
+  // ── BARRIER III — Transitional Load & Setup Friction ─────────────────────
+
+
+
+  'Set5_1': {
+
+    title: 'The Commute',
+
+    desc:  `One to two hours, before any work has started. A bag packed the night before, peripherals included, since nothing can be left at a desk that belongs to no one. Workers described the commute as a cognitive state rather than travel time: a period that belongs neither to rest nor to work, and that has to be recovered from before the first task can begin. The round-trip is rarely calculated in distance. It is calculated in whether the day at the office will justify the cost of getting there.`,
+
+  },
+
+
+
+  'Set5_2': {
+
+    title: 'The Setup Sequence',
+
+    desc:  `A cable that requires a specific port order to initialize correctly. A chair height that needs lowering from whatever the previous occupant needed. A monitor resolution that dropped when it was last unplugged and has not been restored. Workers described the setup sequence as cognitively lightweight but cumulatively taxing: each step is minor, each step is necessary, and together they consume the window of the day when focus is sharpest. The work itself begins after the environment has been rebuilt.`,
+
+  },
+
+
+
+  'Set5_3': {
+
+    title: 'The Search for Quiet',
+
+    desc:  `The floor is too loud, or too exposed, or simply wrong for whatever the next two hours require. So the laptop comes with, along with the notebook, the water bottle, the charger. A meeting room is found, booked for forty minutes, just long enough to settle in before the next occupant's calendar block begins. Workers described the friction less as the move itself and more as what the move costs on both ends: the setup abandoned, the new one assembled, and the awareness that this arrangement too is temporary. The previous thread of work has to be recovered from somewhere.`,
+
+  },
+
+
+
+  'Set5_4': {
+
+    title: 'Interpersonal Interruption',
+
+    desc:  `A colleague stops by with a question that takes thirty seconds. The exchange continues for six minutes. Workers described these interruptions not as inconveniences but as structural features of the open office: events that are socially expected and professionally prudent to engage with, regardless of what they displace. Wearing headphones signals unavailability; the social cost of doing so in front of a senior colleague is sometimes higher than the distraction itself. Complex work migrates toward the hours before anyone arrives or after everyone has left.`,
+
+  },
+
+
+
+  'Set6_1': {
+
+    title: 'The Permanent Setup',
+
+    desc:  `The monitor is already at the right height. Cables routed once, staying where they were left. The notebook is open to yesterday's page. The laptop stayed on overnight, resuming rather than restarting. Workers described the home setup as a material record of the previous session: a physical state that preserves continuity rather than demanding it be reconstructed. The transition into work picks up where the day before ended.`,
+
+  },
+
+
+
+  'Set6_2': {
+
+    title: 'Self-Determined Schedule',
+
+    desc:  `A task completed early opens an hour that can be used however it is needed: a walk, a meal eaten away from the desk, an early start on something else. Workers described governing their own schedule as a productivity condition: the ability to respond to internal signals of fatigue and readiness rather than performing availability for an external audience. At the office, the same break has to be timed against who might see it being taken.`,
+
+  },
+
+
+
+  'Set6_3': {
+
+    title: 'Ambient Company',
+
+    desc:  `A cat that settles nearby at irregular intervals. A partner working at the other end of the table, occasionally asking an unrelated question. Workers described these moments as structurally different from the social interactions the office provides: unscheduled, low-stakes, brief enough not to fragment concentration. They resolve a specific kind of quiet that builds over a long solo working day, without requiring the day to be reorganized around them.`,
+
+  },
+
+
+
+  'Set6_4': {
+
+    title: 'Interruptions Still Happen',
+
+    desc:  `A delivery at the door. A flatmate with one quick question. A neighbor's drilling that runs for twenty minutes then stops. Workers described these as interruptions to attention rather than to the sequence of work: the task waiting when they return is still the same task, in the same state, at the same point in its logic. In the corporate environment, the interruption more often arrives with a request attached: a priority inserted, an order rearranged, a colleague's urgency absorbed into the day before the original intention can resume.`,
+
+  },
+
+
+
+
+
+  // ── BARRIER IV — Surveillance Culture & Micromanagement ──────────────────
+
+
+
+  'Set7_1': {
+
+    title: 'The Attention Performance',
+
+    desc:  `The phone placed face-down is a signal, sent to no one in particular and everyone at once: I am here, I am working, I am not distracted. Workers described a repertoire of similar gestures maintained throughout the day: a browser tab angled toward work content before a manager passes, a posture straightened for a colleague's glance, a break timed to a lull in floor activity. Each gesture is small, deliberate, and legible. Together they constitute a parallel workstream running beneath the actual work: the continuous task of appearing to do the task.`,
+
+  },
+
+
+
+  'Set7_2': {
+
+    title: 'Calculated Self-Presentation',
+
+    desc:  `Before bringing anything personal into the office, workers described running an implicit audit: how this object might read to a senior colleague, whether it signals the wrong kind of personality, whether it invites a conversation they do not want to have. The objects that survive this process tend to be generic: a plant, a mug, a family photo that communicates stability rather than self. Workers described the gap between their home desk and their office desk through what they chose not to risk, rather than any formal prohibition.`,
+
+  },
+
+
+
+  'Set7_3': {
+
+    title: 'The Architectural Gaze',
+
+    desc:  `The open floor does not require active surveillance to produce its effect. The desk faces outward. The walkway runs behind. Anyone can see the screen from three meters away without trying. Workers described an environment in which visibility is simply a physical condition of being present: nothing on the desk, nothing on the screen, no moment of rest or distraction exists outside the potential field of observation. There is no position to take, no gesture to make, that removes this exposure. The floor plan makes it structural.`,
+
+  },
+
+
+
+  'Set8_1': {
+
+    title: 'The Webcam',
+
+    desc:  `The rectangle the camera captures is small enough to control. Workers described making deliberate decisions about what appeared within it: backgrounds blurred or swapped, a lamp repositioned to change how the face reads on screen, a bookshelf arranged for calls rather than for reading. The visibility that the office makes structurally unavoidable, the home makes negotiable. Some participants described this not as a burden but as an inversion: a form of visibility they could author rather than simply submit to.`,
+
+  },
+
+
+
+  'Set8_2': {
+
+    title: 'The Off-Camera Zone',
+
+    desc:  `Just outside the camera's frame: a fidget object used during long calls, reference notes propped where only the worker can read them, whatever trousers or slippers makes sitting through four consecutive meetings bearable. Workers described this margin as a functional zone: a space that holds what the open office prohibits and what the camera frame keeps invisible. Its contents are positioned there because that is where they work best.`,
+
+  },
+
+
+
+};
+
+// Direct key lookup — all objects use strict SetX_Y names.
+function resolveZoneData(rawName) {
+  return zoneData[rawName] || null;
+}
+
+
+// ══════════════════════════════════════
+// SCENE
+// ══════════════════════════════════════
+const container = document.getElementById('canvas-container');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0xffffff, 1);
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xffffff, 80, 200);
+
+const camera = new THREE.PerspectiveCamera(22, window.innerWidth / window.innerHeight, 0.1, 2000);
+camera.position.set(120, 100, 120);
+camera.lookAt(0, 5, 0);
+
+// (Ground grid removed for a clean background)
+
+
+// ══════════════════════════════════════
+// ORBIT CONTROLS (smooth, damped)
+// ══════════════════════════════════════
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 5, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.rotateSpeed = 0.35;
+controls.zoomSpeed = 0.6;
+controls.panSpeed = 0.5;
+controls.minDistance = 20;
+controls.maxDistance = 600;
+controls.maxPolarAngle = Math.PI / 2.05;
+controls.minPolarAngle = 0.2;
+controls.enableRotate = false;   // disabled — scroll drives the camera exclusively
+controls.enablePan = false;      // panning disabled
+controls.enableZoom = false;     // wheel is reserved for the scroll-driven camera
+controls.autoRotate = false;     // no auto-rotate, scroll drives the view
+controls.autoRotateSpeed = 0.6;
+
+// Track drag-vs-click so a click after dragging doesn't trigger selection
+let dragMoved = false;
+let dragStart = { x: 0, y: 0 };
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  dragMoved = false;
+  dragStart.x = e.clientX;
+  dragStart.y = e.clientY;
+});
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (e.buttons === 0) return;
+  if (Math.abs(e.clientX - dragStart.x) > 3 || Math.abs(e.clientY - dragStart.y) > 3) {
+    dragMoved = true;
+  }
+});
+controls.addEventListener('start', () => { controls.autoRotate = false; });
+
+// Set camera distance from target along current view direction
+function setCameraDistance(d) {
+  const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+  if (dir.lengthSq() === 0) dir.set(1, 0.6, 1).normalize();
+  camera.position.copy(controls.target).addScaledVector(dir, d);
+  controls.update();
+}
+
+
+// ══════════════════════════════════════
+// MATERIALS
+// ══════════════════════════════════════
+const edgeMat       = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3  });
+const edgeMatBright = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5  });
+const edgeMatHover  = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.85 });
+const edgeMatDim    = new THREE.LineBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.45 });
+
+// ── Dashed-edge variants (for Set6_4 / Set5_4 / Set3_3) ──────────────────
+// LineDashedMaterial requires computeLineDistances() once on the
+// LineSegments at creation time; after that, material swapping is free.
+// dashSize / gapSize are world-space units — tweak if the model is rescaled.
+const DASH = { dashSize: 0.02, gapSize: 0.03, scale: 1 };
+const edgeMatDashed       = new THREE.LineDashedMaterial({ ...DASH, color: 0x000000, transparent: true, opacity: 0.3  });
+const edgeMatDashedBright = new THREE.LineDashedMaterial({ ...DASH, color: 0x000000, transparent: true, opacity: 0.5  });
+// Hover/select uses blue instead of black — ghost objects have no solid fill to
+// carry the selection signal, so the dashed edge itself must turn blue.
+const edgeMatDashedHover  = new THREE.LineDashedMaterial({ ...DASH, color: 0x2979ff, transparent: true, opacity: 0.9  });
+const edgeMatDashedDim    = new THREE.LineDashedMaterial({ ...DASH, color: 0xcccccc, transparent: true, opacity: 0.45 });
+
+// Map each solid canonical instance → its dashed counterpart so
+// applyZoneEdgeMaterial / dimUnselectedEdges can upgrade on the fly.
+const _solidToDashed = new Map([
+  [edgeMat,       edgeMatDashed],
+  [edgeMatBright, edgeMatDashedBright],
+  [edgeMatHover,  edgeMatDashedHover],
+  [edgeMatDim,    edgeMatDashedDim],
+]);
+// Given a solid canonical mat, return the dashed equivalent (or mat itself).
+function asDashed(mat) { return _solidToDashed.get(mat) ?? mat; }
+
+// Names (exact Blender object names) whose edge outlines use dashed lines.
+const DASHED_EDGE_NAMES = new Set(['Set6_4', 'Set5_4', 'Set5_5', 'Set3_3', 'Set3_4', 'Set1_3', 'Set2_4', 'Set8_3']);
+
+// Returns true if `node` or any ancestor up to (not including) `stopAt`
+// has a name listed in DASHED_EDGE_NAMES.
+function hasDashedName(node, stopAt) {
+  let n = node;
+  while (n && n !== stopAt) {
+    if (DASHED_EDGE_NAMES.has(n.name)) return true;
+    n = n.parent;
+  }
+  return false;
+}
+
+// Names (exact Blender object names) that must never become interactive zones.
+// Meshes in this list render normally but are excluded from raycastTargets and
+// zoneNodes — no hover, no cursor change, no floating label, no selection.
+const UNSELECTABLE_NAMES = new Set(['Set8_5', 'Set2_2']);
+
+// Names of custom proxy meshes that act as invisible raycasting hitboxes.
+// They are kept in raycastTargets (so clicks register) but their surface and
+// edges are hidden, and they are excluded from all highlight passes.
+const PROXY_NAMES = new Set(['Set5_6', 'Set5_7']);
+
+function hasProxyName(node, stopAt) {
+  let n = node;
+  while (n && n !== stopAt) {
+    if (PROXY_NAMES.has(n.name)) return true;
+    n = n.parent;
+  }
+  return false;
+}
+
+// Unified interaction groups: zones that should highlight and select together.
+// Key   = primary zone name — owns the zoneData entry shown in the info panel.
+// Value = array of satellite zone names whose meshes are merged into the primary
+//         after all GLBs in a set finish loading.
+const ZONE_GROUPS = new Map([
+  ['Set2_3', ['Set2_4']],
+  ['Set5_4', ['Set5_5', 'Set5_6', 'Set5_7']],
+  ['Set8_1', ['Set8_3']],
+]);
+
+// Names whose EdgesGeometry is built with a high threshold so only outer
+// boundary / silhouette edges are drawn — internal coplanar lines suppressed.
+const CONTOUR_EDGE_NAMES      = new Set(['Set5_4', 'Set5_5', 'Set6_4']);
+const CONTOUR_ANGLE_THRESHOLD = 30; // degrees — raise to suppress more interior lines
+
+function hasContourName(node, stopAt) {
+  let n = node;
+  while (n && n !== stopAt) {
+    if (CONTOUR_EDGE_NAMES.has(n.name)) return true;
+    n = n.parent;
+  }
+  return false;
+}
+
+// Names of flat/planar objects that billboard toward the camera and spin
+// continuously on their local facing axis so they never go edge-on during the arc.
+const BILLBOARD_NAMES      = new Set(['Set5_4', 'Set5_5', 'Set5_6', 'Set5_7']);
+const BILLBOARD_SPIN_SPEED = 0.6; // radians / second — clockwise when facing camera
+
+// Returns true if `node` or any ancestor up to (not including) `stopAt`
+// has a name listed in UNSELECTABLE_NAMES.
+function hasUnselectableName(node, stopAt) {
+  let n = node;
+  while (n && n !== stopAt) {
+    if (UNSELECTABLE_NAMES.has(n.name)) return true;
+    n = n.parent;
+  }
+  return false;
+}
+// polygonOffset pushes the white fill slightly back in the depth buffer
+// so the EdgesGeometry lines always render cleanly on top (no z-fighting,
+// no lines clipping into the mesh).
+const surfaceMat = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  side: THREE.DoubleSide,
+  polygonOffset: true,
+  polygonOffsetFactor: 1,
+  polygonOffsetUnits: 1,
+});
+
+// Ghost variant for Set6_4 / Set5_4 / Set3_3 — 80% transparent white fill.
+// depthWrite: false  → the ghost mesh does NOT write to the depth buffer, so
+//   solid objects rendered behind it are not erroneously occluded. Three.js
+//   automatically sorts transparent objects back-to-front each frame, which
+//   prevents transparency-ordering artifacts between ghost surfaces.
+// polygonOffset is kept so the edge LineSegments still sit cleanly on top.
+const surfaceMatGhost = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  transparent: true,
+  opacity: 0.2,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  polygonOffset: true,
+  polygonOffsetFactor: 1,
+  polygonOffsetUnits: 1,
+});
+const surfaceMatHover = new THREE.MeshBasicMaterial({
+  color: 0x4a90d9,
+  side: THREE.DoubleSide,
+  polygonOffset: true,
+  polygonOffsetFactor: 1,
+  polygonOffsetUnits: 1,
+});
+const surfaceMatSelected = new THREE.MeshBasicMaterial({
+  color: 0x2979ff,
+  side: THREE.DoubleSide,
+  polygonOffset: true,
+  polygonOffsetFactor: 1,
+  polygonOffsetUnits: 1,
+});
+
+// Ghost (dashed-edge) highlight variants — same hue family as their solid
+// counterparts but lighter tints and transparent so the "ethereal" quality
+// is preserved during hover and selection.
+const surfaceMatHoverGhost = new THREE.MeshBasicMaterial({
+  color: 0x74b3ff,   // saturated sky-blue — visible as a clear tint at low opacity
+  transparent: true,
+  opacity: 0.55,     // high enough to read clearly against the light background
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  polygonOffset: true,
+  polygonOffsetFactor: 1,
+  polygonOffsetUnits: 1,
+});
+const surfaceMatSelectedGhost = new THREE.MeshBasicMaterial({
+  color: 0x5599ff,   // slightly deeper blue to distinguish selected from hover
+  transparent: true,
+  opacity: 0.55,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  polygonOffset: true,
+  polygonOffsetFactor: 1,
+  polygonOffsetUnits: 1,
+});
+
+// Cross-link each solid material to its ghost equivalent so applyZoneMaterial
+// can resolve the right variant without hardcoding material references there.
+surfaceMatHover.ghostVariant    = surfaceMatHoverGhost;
+surfaceMatSelected.ghostVariant = surfaceMatSelectedGhost;
+
+// zone = a named node from the .glb (Group or Mesh) that the user authored.
+// Each zone holds a list of descendant meshes used for raycasting & highlighting.
+const zoneNodes = [];               // Object3D[]
+const zoneMeshSet = new Set();      // meshes that belong to any zone
+const raycastTargets = [];          // flat list of meshes for raycaster
+let billboardNodes = [];            // [{ node, parentWorldQ }] for active set
+const loadedModels = [];            // [{ root, center, size, radius }, ...]
+const cameraStations = [];          // [{ position: Vec3, target: Vec3 }, ...]
+
+
+// ══════════════════════════════════════
+// LOAD MODEL
+// ══════════════════════════════════════
+const loadingScreen = document.getElementById('loadingScreen');
+const loadingBar = document.getElementById('loadingBar');
+const loadingPercent = document.getElementById('loadingPercent');
+const loadingText = document.getElementById('loadingText');
+
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/draco/');
+
+const gltfLoader = new GLTFLoader();
+gltfLoader.setDRACOLoader(dracoLoader);
+
+// ── Billboard animation globals ──────────────────────────────────────────────
+const _bbClock   = new THREE.Clock();
+// Pre-allocated to avoid per-frame GC pressure in the animation hot path.
+const _bbParentQ = new THREE.Quaternion();
+const _bbLocalQ  = new THREE.Quaternion();
+const _bbSpinQ   = new THREE.Quaternion();
+const _bbAxis    = new THREE.Vector3(0, 0, 1); // local Z = facing axis after billboard
+
+function processLoadedModel(inner, { label = '' } = {}) {
+  // Use the model's native coordinates exactly as exported from Blender.
+  // No scaling, centering, rotation, or ground-snapping is applied —
+  // the spatial relationship between models is fully authored upstream.
+  const root = new THREE.Group();
+  root.add(inner);
+  root.updateMatrixWorld(true);
+
+  // ── Pass 1: prepare every mesh — white surface + black edge overlay ──
+  const objectNames = [];
+  inner.traverse((child) => {
+    if (!child.isMesh) return;
+    objectNames.push(child.name || '(unnamed)');
+
+    const edgeThreshold = hasContourName(child, inner)
+      ? CONTOUR_ANGLE_THRESHOLD
+      : EDGE_ANGLE_THRESHOLD;
+    const edges = new THREE.EdgesGeometry(child.geometry, edgeThreshold);
+    // Dashed-edge check: walk up the hierarchy to catch cases where the
+    // special name lives on a parent Group rather than the Mesh itself.
+    const isDashed = hasDashedName(child, inner);
+    const lineMat  = isDashed ? edgeMatDashed.clone() : edgeMat.clone();
+    const lines    = new THREE.LineSegments(edges, lineMat);
+    lines.raycast  = () => {};
+    // LineDashedMaterial needs per-vertex cumulative distances in the geometry.
+    // computeLineDistances() does this once; subsequent material swaps are fine.
+    if (isDashed) lines.computeLineDistances();
+    child.add(lines);
+    child.userData.lines     = lines;
+    child.userData.originalMat  = lineMat;
+    child.userData.dashedEdge   = isDashed; // flag for all material-swap helpers
+
+    // Ghost objects use a semi-transparent surface clone; solid objects use
+    // the normal opaque clone.  Both clones store their own opacity/depthWrite
+    // state independently so they never share a reference.
+    child.material = isDashed ? surfaceMatGhost.clone() : surfaceMat.clone();
+    child.userData.originalSurfaceMat = child.material;
+
+    // Proxy meshes: fully invisible surface + no visible edges, but kept in
+    // raycastTargets so they absorb mouse events on behalf of their zone.
+    // material.visible must stay TRUE — Three.js Mesh.prototype.raycast bails
+    // immediately when material.visible === false, making the proxy unclickable.
+    // Instead we zero-out all rendering contributions while leaving the flag set.
+    if (hasProxyName(child, inner)) {
+      child.material.visible     = true;
+      child.material.transparent = true;
+      child.material.opacity     = 0;
+      child.material.colorWrite  = false;
+      child.material.depthWrite  = false;
+      lines.visible = false;
+      child.userData.isProxy = true;
+      child.raycast = THREE.Mesh.prototype.raycast;
+      raycastTargets.push(child);
+      return;
+    }
+
+    // Unselectable objects: no-op raycast + excluded from raycastTargets so
+    // they can never be hovered, labelled, or selected.  They still receive
+    // full surface + edge materials and are visible in the scene normally.
+    if (hasUnselectableName(child, inner)) {
+      child.raycast = () => {};
+    } else {
+      child.raycast = THREE.Mesh.prototype.raycast;
+      raycastTargets.push(child);
+    }
+  });
+
+  // ── Pass 2: register named author-defined nodes as zones ──
+  const isNamed = (n) =>
+    n && n !== inner && n !== root && typeof n.name === 'string' && n.name.length > 0;
+
+  inner.traverse((node) => {
+    if (!isNamed(node)) return;
+
+    let p = node.parent;
+    let hasNamedAncestor = false;
+    while (p && p !== inner) {
+      if (isNamed(p)) { hasNamedAncestor = true; break; }
+      p = p.parent;
+    }
+    if (hasNamedAncestor) return;
+
+    // Unselectable objects: apply zone-level edge brightness so they look
+    // identical to the rest of the scene, but skip ALL zone registration
+    // (no zoneNodes entry, no zoneMeshSet, no zoneNode back-reference).
+    if (hasUnselectableName(node, inner)) {
+      const um = [];
+      node.traverse((c) => { if (c.isMesh) um.push(c); });
+      um.forEach((m) => {
+        if (!m.userData.lines) return;
+        const mat = m.userData.dashedEdge
+          ? edgeMatDashedBright.clone()
+          : edgeMatBright.clone();
+        m.userData.lines.material = mat;
+        m.userData.originalMat    = mat;
+      });
+      return;
+    }
+
+    const meshes = [];
+    node.traverse((c) => { if (c.isMesh) meshes.push(c); });
+    if (meshes.length === 0) return;
+
+    const manual = !!zoneData[node.name];
+    if (!AUTO_ZONES && !manual) return;
+
+    // Register zone
+    zoneNodes.push(node);
+    node.userData.zoneMeshes = meshes;
+
+    // Per-zone animation state — driven by PART_ANIMATIONS dictionary
+    const animConfig = getAnimationFor(node.name);
+    node.userData.animConfig = animConfig;
+    node.userData.basePosition = node.position.clone();
+    node.userData.animOffset = 0;        // current animated scalar (0..1)
+    node.userData.animTarget = 0;        // target scalar (0 or 1)
+
+    meshes.forEach((m) => {
+      m.userData.zoneNode = node;
+      zoneMeshSet.add(m);
+      // Preserve dashed style for special objects — use dashed-bright instead
+      // of the default solid-bright so zones within these objects look correct.
+      const brightMat = m.userData.dashedEdge
+        ? edgeMatDashedBright.clone()
+        : edgeMatBright.clone();
+      m.userData.lines.material = brightMat;
+      m.userData.originalMat    = brightMat;
+    });
+
+    // If the name isn't in zoneData, seed a minimal fallback title so the
+    // info panel always has something to show (add a proper entry to zoneData
+    // above to give it real content).
+    if (!zoneData[node.name]) {
+      zoneData[node.name] = {
+        title: node.name.replace(/_/g, ' '),
+        desc:  '',
+      };
+    }
+  });
+
+  // ── Pass 3: register billboard nodes (parentWorldQ resolved later in buildSet
+  //    once modelsGroup exists and updateMatrixWorld has been called) ──────────
+  inner.traverse((node) => {
+    if (BILLBOARD_NAMES.has(node.name)) {
+      billboardNodes.push({ node, parentWorldQ: new THREE.Quaternion() });
+    }
+  });
+
+  scene.add(root);
+
+  const finalBox = new THREE.Box3().setFromObject(root);
+  const finalCenter = finalBox.getCenter(new THREE.Vector3());
+  const finalSize = finalBox.getSize(new THREE.Vector3());
+  const finalRadius = Math.max(finalSize.x, finalSize.y, finalSize.z) * 5.5;
+
+  loadedModels.push({
+    root,
+    inner,
+    center: finalCenter,
+    size: finalSize,
+    radius: finalRadius,
+    label,
+  });
+
+  console.log(`%c ─── LOADED ${label || 'model'} ─── `, 'background:#eef;color:#2979ff;font-weight:bold;padding:2px 6px;');
+  console.table(objectNames.map((n, i) => ({ index: i, name: n, isZone: !!zoneData[n] })));
+
+  return loadedModels[loadedModels.length - 1];
+}
+
+function loadGLB(path, opts) {
+  return new Promise((resolve, reject) => {
+    gltfLoader.load(
+      path,
+      (gltf) => {
+        try { resolve(processLoadedModel(gltf.scene, opts)); }
+        catch (e) { reject(e); }
+      },
+      (xhr) => {
+        if (xhr.total > 0) {
+          const pct = Math.round((xhr.loaded / xhr.total) * 100);
+          loadingBar.style.width = pct + '%';
+          loadingPercent.textContent = pct;
+        }
+      },
+      (err) => reject(err)
+    );
+  });
+}
+
+// Globals shared with the scroll-driven arc camera
+let arcCenter = new THREE.Vector3();    // midpoint between the two desks
+let arcRadius = 100;                    // horizontal radius of the camera arc
+let arcHeight = 20;                     // camera elevation above arcCenter
+const arcTargetA = new THREE.Vector3(); // look-at at scroll t=0 (desk 1 center)
+const arcTargetB = new THREE.Vector3(); // look-at at scroll t=1 (desk 2 center)
+
+// Scroll progress — declared here (before the async loader) so
+// activateSet() can safely reset it whenever the user switches sets.
+let scrollT = 0;
+let smoothedScrollT = 0;
+
+// ══════════════════════════════════════
+// CAROUSEL STATE — one entry per model pair in MODEL_SETS
+// ══════════════════════════════════════
+const modelSets = [];   // [{ modelsGroup, models, raycastTargets, zoneNodes, zoneMeshSet, loadedModels, arcCenter, arcRadius, arcHeight, arcTargetA, arcTargetB }]
+let activeSetIndex = 0;
+
+// Merge satellite zone nodes into their primary zone node so they behave as a
+// single interactive unit.  Must be called after all processLoadedModel() calls
+// for the set have finished (so every zone node has been registered).
+//
+// For each [primary, satellites] entry in ZONE_GROUPS:
+//   • The satellite's meshes are appended to the primary's zoneMeshes array.
+//   • Each satellite mesh's userData.zoneNode is updated to point at the primary.
+//   • The satellite zone node is removed from zoneNodes (it no longer needs
+//     independent hover/select/animation registration).
+//
+// Everything downstream (resolveZone, applyZoneMaterial, dimUnselectedEdges,
+// selectZone, updatePartAnimations) already operates on these two data
+// structures — no further changes are needed.
+function mergeZoneGroups() {
+  for (const [primaryName, satellites] of ZONE_GROUPS) {
+    const primaryNode = zoneNodes.find(z => z.name === primaryName);
+    if (!primaryNode) continue; // primary not present in this set — skip silently
+
+    for (const satName of satellites) {
+      const satIdx = zoneNodes.findIndex(z => z.name === satName);
+      if (satIdx === -1) continue; // satellite not in this set — skip silently
+
+      const satNode = zoneNodes[satIdx];
+
+      // Re-home every satellite mesh into the primary zone
+      satNode.userData.zoneMeshes.forEach((m) => {
+        m.userData.zoneNode = primaryNode;
+        primaryNode.userData.zoneMeshes.push(m);
+      });
+
+      // Drop the now-redundant satellite zone node
+      zoneNodes.splice(satIdx, 1);
+
+      console.log(`[ZONE_GROUPS] merged "${satName}" → "${primaryName}"`);
+    }
+  }
+}
+
+// Build ONE set: load its .glb files, wrap in a rotated/scaled parent
+// Group, and snapshot the per-set state (raycast targets, zone nodes,
+// camera arc values). The modelsGroup is added to the scene hidden;
+// activateSet() toggles visibility.
+async function buildSet(setConfig, index) {
+  // processLoadedModel mutates the module-level raycastTargets /
+  // zoneNodes / zoneMeshSet / loadedModels containers. Clear them first
+  // so this set's data doesn't bleed into the previous set's snapshot.
+  raycastTargets.length = 0;
+  zoneNodes.length = 0;
+  zoneMeshSet.clear();
+  loadedModels.length = 0;
+  billboardNodes.length = 0;
+
+  try {
+    const models = [];
+    for (const p of setConfig.paths) {
+      try {
+        models.push(await loadGLB(p, { label: p }));
+      } catch (e) {
+        console.warn(`[set ${index}] failed to load ${p}:`, e);
+      }
+    }
+    if (!models.length) {
+      console.warn(`[set ${index}] no models loaded — skipping set "${setConfig.label}"`);
+      return null;
+    }
+
+    // Merge any author-defined zone groups so paired objects share a single
+    // interaction node.  Must run here, after all GLBs have been processed.
+    mergeZoneGroups();
+
+    // ── Diagnostic: check for missing models or empty geometry ──
+    if (models.length < setConfig.paths.length) {
+      console.warn(`[set ${index} "${setConfig.label}"] expected ${setConfig.paths.length} models but only loaded ${models.length}`);
+    }
+    models.forEach((m, mi) => {
+      let meshCount = 0, emptyCount = 0;
+      m.root.traverse((c) => {
+        if (c.isMesh) {
+          meshCount++;
+          if (!c.geometry || c.geometry.getAttribute('position') === undefined || c.geometry.getAttribute('position').count === 0) {
+            emptyCount++;
+          }
+        }
+      });
+      if (meshCount === 0) {
+        console.warn(`[set ${index}] model[${mi}] (${setConfig.paths[mi]}) has 0 meshes — it will be invisible`);
+      } else if (emptyCount > 0) {
+        console.warn(`[set ${index}] model[${mi}] (${setConfig.paths[mi]}) has ${emptyCount}/${meshCount} meshes with empty geometry`);
+      } else {
+        console.log(`[set ${index}] model[${mi}] (${setConfig.paths[mi]}): ${meshCount} meshes OK`);
+      }
+    });
+
+    const modelsGroup = new THREE.Group();
+    models.forEach(m => modelsGroup.add(m.root));
+    modelsGroup.rotation.y = -Math.PI / 2;
+    modelsGroup.scale.set(3, 3, 3);
+    modelsGroup.visible = false;
+    scene.add(modelsGroup);
+    modelsGroup.updateMatrixWorld(true);
+
+    // Now that the full hierarchy (modelsGroup rotation/scale) is resolved,
+    // cache each billboard node's parent world quaternion.  The rotation is
+    // constant after this point so we only pay this cost once per set load.
+    for (const entry of billboardNodes) {
+      if (entry.node.parent) entry.node.parent.getWorldQuaternion(entry.parentWorldQ);
+    }
+
+    // Refresh each model's world-space center/size now that the parent
+    // Group has been rotated and scaled.
+    const refreshBounds = (m) => {
+      const b = new THREE.Box3().setFromObject(m.root);
+      m.center = b.getCenter(new THREE.Vector3());
+      m.size   = b.getSize(new THREE.Vector3());
+    };
+    models.forEach(refreshBounds);
+
+    const m1 = models[0];
+    const m2 = models[1] || null;
+    const c1 = m1.center.clone();
+    const c2 = m2 ? m2.center.clone() : c1.clone();
+    const setArcCenter = new THREE.Vector3().addVectors(c1, c2).multiplyScalar(0.5);
+
+    // Manual camera distance — same knob as before, per-set copy.
+    const viewDist = 15;
+    const m1Box  = new THREE.Box3().setFromObject(m1.root);
+    const m1Size = m1Box.getSize(new THREE.Vector3());
+    const maxRadius = Math.max(m1Size.x, m1Size.y, m1Size.z) * 0.55;
+
+    return {
+      index,
+      label: setConfig.label,
+      modelsGroup,
+      models,
+      raycastTargets: raycastTargets.slice(),
+      zoneNodes:      zoneNodes.slice(),
+      zoneMeshSet:    new Set(zoneMeshSet),
+      loadedModels:   loadedModels.slice(),
+      billboardNodes: billboardNodes.slice(),
+      arcCenter:      setArcCenter,
+      arcRadius:      viewDist,
+      arcHeight:      viewDist * 0.5,
+      arcTargetA:     c1,
+      arcTargetB:     c2,
+      targetYBias:    setConfig.targetYBias || 0,
+      arcXBias:       setConfig.arcXBias    || 0,
+    };
+  } catch (err) {
+    // Don't let a bad set tear down the carousel — log it and skip.
+    console.error(`[set ${index}] buildSet crashed for "${setConfig.label}":`, err);
+    return null;
+  }
+}
+
+// ══════════════════════════════════════
+// SCROLLYTELLING — FIXED CANVAS ARCHITECTURE
+// ══════════════════════════════════════
+// The canvas is fixed to the viewport (z-index 1).  Each model set
+// has a transparent 400vh .model-track div that provides scroll runway.
+// Between tracks, an opaque .article-section covers the canvas; the
+// camera silently snaps to the next set at arcT=0 (blind-spot swap).
+//
+// Per-track scroll segment (localT ∈ [0, 1]):
+//   [0,              START_DWELL_FRAC)  → hold at arcT=0 (start dwell)
+//   [START_DWELL_FRAC, 1−DWELL_FRAC)   → 180° arc sweep (arcT 0 → 1)
+//   [1−DWELL_FRAC,   1]                → hold at arcT=1 (end dwell)
+// First set has no start dwell; last set has no end dwell.
+//
+const VERTICAL_SPACING  = 80;       // Y offset between consecutive sets in 3D
+const START_DWELL_FRAC  = 0.25;     // fraction of track held at arcT=0
+const DWELL_FRAC        = 0.25;     // fraction of track held at arcT=1
+
+// Apply vertical offsets + make every set visible. Called once after
+// the preload loop finishes.
+function applyVerticalLayout() {
+  modelSets.forEach((s, idx) => {
+    if (!s) return;
+    // Negative offset — each successive set sits BELOW the previous
+    // one so the camera naturally lowers as the user scrolls down.
+    const yOff = idx * -VERTICAL_SPACING;
+    s.modelsGroup.position.y = yOff;
+    s.modelsGroup.visible = true;
+    s.modelsGroup.updateMatrixWorld(true);
+
+    // Recompute per-set arc values so the camera follows the offset.
+    // Store the original un-offset values on first call.
+    if (s._origArcCenter == null) {
+      s._origArcCenter  = s.arcCenter.clone();
+      s._origTargetA    = s.arcTargetA.clone();
+      s._origTargetB    = s.arcTargetB.clone();
+    }
+    s.arcCenter.copy(s._origArcCenter).y   += yOff;
+    s.arcTargetA.copy(s._origTargetA).y    += yOff;
+    s.arcTargetB.copy(s._origTargetB).y    += yOff;
+  });
+
+}
+// Note: --num-sets CSS variable removed; model-track elements define
+// scroll runway directly in HTML, no dynamic height override needed.
+
+// Roman numeral helper for the floating progress pill label.
+const _ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+function toRoman(n) { return _ROMAN[n - 1] || String(n); }
+
+// Swap only the raycast / zone state (no visibility toggling).
+// Called when the "primary" set changes during scrolling.
+function activateSetRaycast(i) {
+  if (i < 0 || i >= modelSets.length) return;
+  const s = modelSets[i];
+  if (!s) return;
+  activeSetIndex = i;
+
+  raycastTargets.length = 0; raycastTargets.push(...s.raycastTargets);
+  zoneNodes.length = 0;      zoneNodes.push(...s.zoneNodes);
+  zoneMeshSet.clear();       s.zoneMeshSet.forEach(m => zoneMeshSet.add(m));
+  loadedModels.length = 0;   loadedModels.push(...s.loadedModels);
+  billboardNodes.length = 0; if (s.billboardNodes) billboardNodes.push(...s.billboardNodes);
+
+  if (typeof outlinePass !== 'undefined' && outlinePass) {
+    outlinePass.selectedObjects = s.models.map(m => m.root);
+  }
+
+  // Update the floating label.
+  const labelEl = document.getElementById('setLabelFloatText');
+  if (labelEl) {
+    labelEl.textContent = `Barrier ${toRoman(i + 1)}`;
+  }
+
+  // Force hero text to re-evaluate for the new set.
+  if (typeof updateHeroCopy === 'function') {
+    currentHeroKey = null;
+    updateHeroCopy();
+  }
+}
+
+// activateSet: scroll to the model-track element + swap raycast state.
+function activateSet(i) {
+  if (!modelSets.length) return;
+  const n = modelSets.length;
+  i = ((i % n) + n) % n;
+
+  applyVerticalLayout();
+
+  // Scroll to the corresponding model-track div.
+  const track = modelTracks[i];
+  if (track) {
+    window.scrollTo({ top: track.offsetTop, behavior: 'smooth' });
+  }
+
+  activateSetRaycast(i);
+}
+
+// Compute camera position + look-at for a given set at arc progress
+// `arcT` ∈ [0, 1].  Every set sweeps the same direction: angle 0 → π
+// (desk A → desk B).  Models are always viewed in sequential order
+// (1, 2, 3, 4…).
+function computeSetCamera(set, arcT) {
+  const t = arcEase(arcT);
+  const angle = Math.PI * t;
+  // Screen-space horizontal bias — decomposed into world X/Z along the
+  // camera's tangent so the offset stays locked throughout the full 180° arc.
+  const xBias  = set.arcXBias || 0;
+  const shiftX =  xBias * Math.cos(angle);
+  const shiftZ = -xBias * Math.sin(angle); // negative sin maps to correct Z tangent
+  const pos = new THREE.Vector3(
+    set.arcCenter.x + set.arcRadius * Math.sin(angle) + shiftX,
+    set.arcCenter.y + set.arcHeight,
+    set.arcCenter.z + set.arcRadius * Math.cos(angle) + shiftZ
+  );
+  const target = new THREE.Vector3().lerpVectors(set.arcTargetA, set.arcTargetB, t);
+  target.x += shiftX;
+  target.z += shiftZ;
+  target.y -= set.arcHeight * 0.35;
+  target.y += set.targetYBias || 0;
+  return { pos, target };
+}
+
+// ── UTILITY: smooth-step blending for transitions ──────────────
+function smoothStep01(x) { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); }
+
+// Disposal helpers for removing sets.
+
+function disposeSetResources(set) {
+  if (!set) return;
+  if (set.modelsGroup) {
+    scene.remove(set.modelsGroup);
+    set.modelsGroup.traverse((obj) => {
+      if (obj.isMesh || obj.isLineSegments) {
+        if (obj.geometry) obj.geometry.dispose && obj.geometry.dispose();
+      }
+    });
+  }
+}
+
+function removeConfigFromStorage(set) {
+  try {
+    const raw = localStorage.getItem(STUDIO_STORAGE_KEY);
+    if (!raw) return;
+    const all = JSON.parse(raw) || [];
+    const filtered = all.filter((cfg) => {
+      if (set.createdAt != null && cfg.createdAt != null) {
+        return !(cfg.createdAt === set.createdAt && cfg.label === set.label);
+      }
+      return cfg.label !== set.label;
+    });
+    localStorage.setItem(STUDIO_STORAGE_KEY, JSON.stringify(filtered));
+  } catch (e) {
+    console.warn('[studio] could not update saved configs during delete:', e);
+  }
+}
+
+
+// ── HERO COPY — dynamic title & description ────────────────────
+// The hero <h1> / <p> swap content based on whichever desk is
+// currently facing the camera:
+//   • Models 1 & 3 (the "left" desk in each default set)  → corporate
+//   • Models 2 & 4 (the "right" desk in each default set) → home
+//   • Any other set                                        → custom
+// updateHeroCopy() is called from both activateSet() (when the user
+// switches sets) and the scroll camera loop (when the arc sweeps past
+// the midpoint). It no-ops if the key hasn't actually changed so the
+// DOM isn't touched every frame.
+const HERO_COPY = {
+  custom: {
+    title: 'Discover the<br/><em>Custom Workspace</em>',
+    desc:  'A workspace designed by you.',
+  },
+};
+
+// Each entry has a thematic `title` (constant for the whole set) plus
+// per-desk `desc` strings that swap as the camera arc crosses 0.5.
+const HERO_COPY_PER_SET = [
+  {
+    title:     'Bodily Rejection of<br/>the <em>Averaged Office</em>',
+    corporate: { desc: 'A desk configured for the average worker, which in practice means no one in particular.' },
+    home:      { desc: 'A desk shaped around one person through accumulated choice and ad-hoc adjustment.' },
+  },
+  {
+    title:     'The Limits of<br/><em>Individualization</em>',
+    home:      { desc: 'A desk that holds traces of the person who uses it. Shelves, pinboards, objects that have accumulated over time.' },
+    corporate: { desc: 'A desk that resets overnight. A cleared surface, no fixed storage, configured for the next person rather than the last.' },
+  },
+  {
+    title:     'Transitional Load<br/>&amp; <em>Setup Friction</em>',
+    home:      { desc: 'Cables routed once, a monitor at one fixed height, a chair no one else has adjusted. A setup that starts where it was left.' },
+    corporate: { desc: 'Cables reconnected each morning, chair and monitor adjusted from a previous user\'s settings. A setup rebuilt at the start of each visit.' },
+  },
+  {
+    title:     'Surveillance Culture<br/>&amp; <em>Micromanagement</em>',
+    home:      { desc: 'A workspace where physical movement is unobserved. Visibility is limited to whatever the camera frame includes.' },
+    corporate: { desc: 'A workspace where physical presence and movement remain visible to colleagues and managers throughout the day.' },
+  },
+];
+
+const heroTitleEl = document.getElementById('heroTitle');
+const heroDescEl  = document.getElementById('heroDesc');
+let   currentHeroKey = null;
+
+function resolveHeroKey() {
+  const set = modelSets[activeSetIndex];
+  if (!set) return 'corporate';
+  if (set.isPublished) return 'custom';
+  return currentLocalArcT < 0.5 ? 'home' : 'corporate';
+}
+
+function updateHeroCopy() {
+  const key = resolveHeroKey();
+  const cacheKey = key === 'custom' ? `custom:${activeSetIndex}` : `${activeSetIndex}:${key}`;
+  if (cacheKey === currentHeroKey) return;
+  currentHeroKey = cacheKey;
+
+  if (key === 'custom') {
+    const copy = HERO_COPY.custom;
+    if (heroTitleEl) heroTitleEl.innerHTML = copy.title;
+    if (heroDescEl) {
+      const set = modelSets[activeSetIndex];
+      const userDesc = set && set.description && set.description.trim();
+      heroDescEl.innerHTML = userDesc || copy.desc;
+    }
+  } else {
+    const perSet = HERO_COPY_PER_SET[activeSetIndex] || HERO_COPY_PER_SET[0];
+    // Title is thematic and constant for the whole set.
+    if (heroTitleEl) heroTitleEl.innerHTML = perSet.title;
+    // Description swaps between desks as the arc crosses the midpoint.
+    const deskCopy = perSet[key];
+    if (deskCopy && heroDescEl) heroDescEl.innerHTML = deskCopy.desc;
+  }
+}
+
+// Preload every set up front, then activate set 0. Each set is built
+// inside its own try/catch so one bad set never stops the others.
+(async () => {
+  const buildErrors = [];
+  for (let i = 0; i < MODEL_SETS.length; i++) {
+    try {
+      const set = await buildSet(MODEL_SETS[i], i);
+      if (set) modelSets.push(set);
+      else buildErrors.push(`${MODEL_SETS[i].label}: buildSet returned null (check console for details)`);
+    } catch (err) {
+      console.error(`[set ${i}] unexpected error:`, err);
+      buildErrors.push(`${MODEL_SETS[i].label}: ${err && err.message ? err.message : err}`);
+    }
+  }
+
+  if (!modelSets.length) {
+    // Every set failed — show the first collected error so it's actionable.
+    const detail = buildErrors.length ? buildErrors.join(' | ') : 'unknown error';
+    console.error('Model load failed — no sets loaded. Details:', buildErrors);
+    loadingText.textContent = `Could not load any model sets. ${detail}`;
+    loadingText.style.color = '#ff3d71';
+    loadingPercent.textContent = '!';
+    loadingPercent.style.color = '#ff3d71';
+    return;
+  }
+
+  try {
+    // Lay out all sets vertically and make them all visible.
+    applyVerticalLayout();
+
+    // Swap raycast/zone state to set 0 and position the camera.
+    activateSetRaycast(0);
+
+    // Write the total count once — derives from the final modelSets array so
+    // it stays correct if sets are added or removed from MODEL_SETS later.
+    const _totalEl = document.getElementById('setLabelTotal');
+    if (_totalEl) _totalEl.textContent = ' of ' + toRoman(modelSets.length);
+
+    if (modelSets[0]) {
+      const cam = computeSetCamera(modelSets[0], 0);
+      camera.position.copy(cam.pos);
+      controls.target.copy(cam.target);
+      camera.lookAt(cam.target);
+      camera.updateProjectionMatrix();
+      controls.update();
+    }
+
+    // Debug panel (reflects the currently active set's zoneNodes).
+    if (window.location.search.includes('debug')) {
+      const panel = document.getElementById('debugPanel');
+      const list = document.getElementById('debugList');
+      panel.style.display = 'block';
+      zoneNodes.forEach(z => {
+        const div = document.createElement('div');
+        div.className = 'obj-name is-zone';
+        div.textContent = z.name;
+        list.appendChild(div);
+      });
+    }
+
+    if (buildErrors.length) {
+      console.warn(`[carousel] ${buildErrors.length} set(s) failed to load:`, buildErrors);
+    }
+
+    loadingScreen.classList.add('hidden');
+  } catch (err) {
+    console.error('Scene setup failed:', err);
+    loadingText.textContent = `Scene setup failed: ${err && err.message ? err.message : err}`;
+    loadingText.style.color = '#ff3d71';
+    loadingPercent.textContent = '!';
+    loadingPercent.style.color = '#ff3d71';
+  }
+})();
+
+// Compute the camera distance required to fit a sphere of `radius` exactly
+// inside the current PerspectiveCamera FOV (with a small padding).
+function fitDistanceForRadius(radius, padding = 1.25) {
+  const halfFov = (camera.fov * 0.5) * Math.PI / 180;
+  const halfFovH = Math.atan(Math.tan(halfFov) * camera.aspect);
+  const limit = Math.min(halfFov, halfFovH);
+  return (radius / Math.sin(limit)) * padding;
+}
+
+
+// ══════════════════════════════════════
+// RAYCASTING — accurate mesh intersection against zone meshes only.
+// ══════════════════════════════════════
+const raycaster = new THREE.Raycaster();
+raycaster.params.Line.threshold = 0;   // never pick line helpers
+raycaster.params.Points.threshold = 0;
+const mouse = new THREE.Vector2();
+let hoveredZone = null;       // Object3D (zone node)
+let selectedZone = null;      // Object3D (zone node)
+const zoneLabel = document.getElementById('zoneLabel');
+const infoPanel    = document.getElementById('infoPanel');
+const wiHomeEl     = document.getElementById('wiHome');
+const wiCorpEl     = document.getElementById('wiCorp');
+const infoPanelTitle = document.getElementById('infoPanelTitle');
+const infoPanelDesc = document.getElementById('infoPanelDesc');
+
+// Resolve a hit mesh up to the registered zone node it belongs to.
+function resolveZone(mesh) {
+  if (!mesh) return null;
+  if (mesh.userData && mesh.userData.zoneNode) return mesh.userData.zoneNode;
+  let p = mesh.parent;
+  while (p) {
+    if (p.userData && p.userData.zoneMeshes) return p;
+    p = p.parent;
+  }
+  return null;
+}
+
+function applyZoneMaterial(zone, mat) {
+  if (!zone || !zone.userData.zoneMeshes) return;
+  zone.userData.zoneMeshes.forEach((m) => {
+    if (m.userData.isProxy) return; // proxy meshes stay invisible at all times
+    const effective = m.userData.dashedEdge
+      ? (mat.ghostVariant || mat)
+      : mat;
+    m.material = effective.clone();
+    m.userData.isHighlighted = true;
+  });
+}
+
+function applyZoneEdgeMaterial(zone, mat) {
+  if (!zone || !zone.userData.zoneMeshes) return;
+  zone.userData.zoneMeshes.forEach((m) => {
+    if (m.userData.isProxy) return; // proxy meshes have no visible edges
+    if (!m.userData.lines) return;
+    const chosen = m.userData.dashedEdge ? asDashed(mat) : mat;
+    m.userData.lines.material = chosen.clone();
+  });
+}
+
+function restoreZoneMaterial(zone) {
+  if (!zone || !zone.userData.zoneMeshes) return;
+  const dimmed = !!selectedZone && zone !== selectedZone;
+  zone.userData.zoneMeshes.forEach((m) => {
+    if (m.userData.isProxy) return; // proxy meshes have no state to restore
+    if (m.userData.originalSurfaceMat) m.material = m.userData.originalSurfaceMat;
+    m.userData.isHighlighted = false;
+    if (m.userData.lines) {
+      m.userData.lines.material = dimmed
+        ? (m.userData.dashedEdge ? edgeMatDashedDim : edgeMatDim)
+        : (m.userData.originalMat || (m.userData.dashedEdge ? edgeMatDashed : edgeMat));
+    }
+  });
+}
+
+// Push every non-selected mesh's edge color to a light gray so the selected
+// zone visually pops to the foreground.
+function dimUnselectedEdges() {
+  const selSet = new Set(
+    selectedZone && selectedZone.userData.zoneMeshes
+      ? selectedZone.userData.zoneMeshes
+      : []
+  );
+  raycastTargets.forEach((m) => {
+    if (!m.userData.lines) return;
+    const solid = selSet.has(m) ? edgeMatHover : edgeMatDim;
+    m.userData.lines.material = m.userData.dashedEdge ? asDashed(solid) : solid;
+  });
+}
+
+function undimAllEdges() {
+  raycastTargets.forEach((m) => {
+    if (m.userData.lines && m.userData.originalMat) {
+      m.userData.lines.material = m.userData.originalMat;
+    }
+  });
+}
+
+// Pick the closest mesh under the cursor that belongs to a zone.
+function pickZone(clientX, clientY) {
+  mouse.x = (clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  // Non-recursive: raycastTargets is a flat list of meshes only.
+  const hits = raycaster.intersectObjects(raycastTargets, false);
+  for (let i = 0; i < hits.length; i++) {
+    const z = resolveZone(hits[i].object);
+    if (z) return z;
+  }
+  return null;
+}
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  const zone = pickZone(e.clientX, e.clientY);
+
+  if (hoveredZone && hoveredZone !== zone) {
+    if (hoveredZone === selectedZone) {
+      applyZoneMaterial(hoveredZone, surfaceMatSelected);
+      applyZoneEdgeMaterial(hoveredZone, edgeMatHover);
+    } else {
+      restoreZoneMaterial(hoveredZone);
+    }
+    hoveredZone = null;
+    zoneLabel.classList.remove('visible');
+    renderer.domElement.style.cursor = 'grab';
+  }
+
+  if (zone && zone !== hoveredZone) {
+    hoveredZone = zone;
+    if (zone !== selectedZone) {
+      applyZoneMaterial(zone, surfaceMatHover);
+      applyZoneEdgeMaterial(zone, edgeMatHover);
+    }
+    const data = resolveZoneData(zone.name);
+    zoneLabel.textContent = data ? data.title : zone.name;
+    zoneLabel.classList.add('visible');
+    zoneLabel.style.left = (e.clientX + 16) + 'px';
+    zoneLabel.style.top = (e.clientY - 12) + 'px';
+    renderer.domElement.style.cursor = 'pointer';
+  } else if (zone) {
+    // Just move the label with the cursor
+    zoneLabel.style.left = (e.clientX + 16) + 'px';
+    zoneLabel.style.top = (e.clientY - 12) + 'px';
+  }
+});
+
+// Reverse selection: animate part back to base, undim everything, hide panel.
+function deselectCurrent() {
+  if (!selectedZone) return;
+  selectedZone.userData.animTarget = 0;
+  const prev = selectedZone;
+  selectedZone = null;
+  restoreZoneMaterial(prev);
+  undimAllEdges();
+  infoPanel.classList.remove('visible');
+}
+
+// Clear ALL active 3D interaction state (hover tooltip + selection + panel).
+// Called the moment the canvas goes under an article section so no UI bleeds
+// into the reading area.  Safe to call even when nothing is active.
+function clearInteractionState() {
+  if (hoveredZone) {
+    // Restore material only if this zone isn't also selected (deselectCurrent
+    // will handle that case below).
+    if (hoveredZone !== selectedZone) restoreZoneMaterial(hoveredZone);
+    hoveredZone = null;
+    zoneLabel.classList.remove('visible');
+    renderer.domElement.style.cursor = 'grab';
+  }
+  deselectCurrent();
+}
+
+function selectZone(zone) {
+  // If a different zone was selected, reset it first
+  if (selectedZone && selectedZone !== zone) {
+    selectedZone.userData.animTarget = 0;
+    const prev = selectedZone;
+    selectedZone = null;
+    restoreZoneMaterial(prev);
+  }
+
+  selectedZone = zone;
+  zone.userData.animTarget = 1;     // animate to its configured offset
+  applyZoneMaterial(zone, surfaceMatSelected);
+  dimUnselectedEdges();
+
+  const data = resolveZoneData(zone.name) || { title: zone.name, desc: '' };
+  infoPanelTitle.textContent = data.title;
+  infoPanelDesc.textContent = data.desc;
+  infoPanel.classList.add('visible');
+  // Camera is intentionally NOT modified on click — it stays put.
+}
+
+renderer.domElement.addEventListener('click', (e) => {
+  if (dragMoved) return;
+  const zone = pickZone(e.clientX, e.clientY);
+
+  // (1) Click on empty space → deselect everything
+  if (!zone) {
+    deselectCurrent();
+    return;
+  }
+
+  // (2) Click on the currently selected zone → toggle off
+  if (zone === selectedZone) {
+    deselectCurrent();
+    return;
+  }
+
+  // (3) Click on a different (or first) zone → select it
+  selectZone(zone);
+});
+
+document.getElementById('closePanel').addEventListener('click', () => {
+  deselectCurrent();
+});
+
+
+// ══════════════════════════════════════
+// SCROLL-DRIVEN ARC CAMERA — SCROLLYTELLING
+// ══════════════════════════════════════
+// A global progress value [0..1] drives the camera through ALL model
+// sets sequentially.  Each set gets 1/N of the scroll runway.  Within
+// a set the camera performs a 180° arc (desk A → desk B), with short
+// transition zones at the boundaries where the camera smoothly travels
+// vertically between sets.
+//
+// scrollT / smoothedScrollT are still used (declared earlier).
+// scrollT       → raw global [0..1] across the entire wrapper
+// smoothedScrollT → smoothed version (scrub-like lag)
+
+const _tmpPos    = new THREE.Vector3();
+const _tmpTarget = new THREE.Vector3();
+
+// GSAP easing for the arc — falls back to a manual smoothstep if GSAP
+// isn't available for any reason.
+const arcEase = (typeof gsap !== 'undefined' && gsap.parseEase)
+  ? gsap.parseEase('power2.inOut')
+  : (x) => x * x * (3 - 2 * x);
+
+// ── Fixed-canvas scroll reading ──────────────────────────────────
+// Instead of measuring a tall wrapper element, we measure each
+// .model-track div directly.  When one straddles the viewport
+// (rect.top ≤ 0 and rect.bottom ≥ vh), we're scrolling through it
+// and compute a per-track localT ∈ [0,1].  When no track straddles
+// the viewport, `canvasCovered = true` (we're inside an article).
+const modelTracks = Array.from(document.querySelectorAll('.model-track'));
+
+let activeTrackIndex = 0;
+let canvasCovered    = false;
+
+// Scroll-direction tracking: +1 = downward, -1 = upward.
+// Used by updateScrollCamera to snap the blind-spot camera to the
+// correct end of the arc (arcT=0 when entering from top, arcT=1
+// when entering from bottom after scrolling back up).
+let lastScrollY = window.scrollY;
+let scrollDir   = 1; // assume downward on first load
+
+// Cache article section elements once — same document order as modelTracks.
+const articleSections = Array.from(document.querySelectorAll('.article-section'));
+
+// Intro curtain — treated as a canvas-covering surface in readScroll().
+const introCurtainEl  = document.getElementById('introCurtain');
+// Bridge section — same treatment; uses .static-section so it is excluded
+// from articleSections[] and never shifts blind-spot swap indices.
+const bridgeSectionEl = document.getElementById('bridgeSection');
+
+function readScroll() {
+  // Update scroll direction before any other logic.
+  const currentScrollY = window.scrollY;
+  if (currentScrollY !== lastScrollY) {
+    scrollDir   = currentScrollY > lastScrollY ? 1 : -1;
+    lastScrollY = currentScrollY;
+  }
+
+  const vh = window.innerHeight;
+
+  // ── Priority 1: inside a model track (canvas fully exposed) ──────────
+  for (let i = 0; i < modelTracks.length; i++) {
+    const rect = modelTracks[i].getBoundingClientRect();
+    if (rect.top <= 0 && rect.bottom >= vh) {
+      const scrollable = rect.height - vh;
+      scrollT = scrollable > 0
+        ? Math.max(0, Math.min(1, -rect.top / scrollable))
+        : 0;
+
+      // Track-change guard: if we jumped to a different set (fast scroll
+      // skipped the article), force a one-frame synthetic blind spot so
+      // the set swap happens invisibly in updateScrollCamera().
+      const setForTrack = Math.min(i, modelSets.length - 1);
+      if (setForTrack !== activeSetIndex) {
+        activeTrackIndex = i;
+        if (!canvasCovered) {
+          canvasCovered = true;
+          document.body.classList.add('reading');
+        }
+        return;
+      }
+
+      activeTrackIndex = i;
+      if (canvasCovered) {
+        canvasCovered = false;
+        document.body.classList.remove('reading');
+      }
+      return;
+    }
+  }
+
+  // ── Priority 2: an article section covers the viewport centre ────────
+  // Relaxed from "fully covers" (rect.top ≤ 0 && rect.bottom ≥ vh) to
+  // "covers the midpoint".  On fast scrolls the strict full-cover test
+  // can be missed entirely within a single frame.  Checking the midpoint
+  // ensures the blind spot still fires reliably.
+  const mid = vh / 2;
+  for (const article of articleSections) {
+    const rect = article.getBoundingClientRect();
+    if (rect.top <= mid && rect.bottom >= mid) {
+      if (!canvasCovered) {
+        canvasCovered = true;
+        document.body.classList.add('reading');
+      }
+      return;
+    }
+  }
+
+  // ── Priority 2b: intro curtain covers the viewport ───────────────────
+  // Same visual effect as an article section — canvas is fully hidden.
+  if (introCurtainEl) {
+    const ir = introCurtainEl.getBoundingClientRect();
+    if (ir.top <= 0 && ir.bottom >= vh) {
+      if (!canvasCovered) {
+        canvasCovered = true;
+        document.body.classList.add('reading');
+      }
+      return;
+    }
+  }
+
+  // ── Priority 2c: bridge section covers the viewport centre ───────────
+  // .static-section is excluded from articleSections[] to preserve swap
+  // indices, so it needs its own explicit check here (same as intro curtain).
+  if (bridgeSectionEl) {
+    const br = bridgeSectionEl.getBoundingClientRect();
+    if (br.top <= mid && br.bottom >= mid) {
+      if (!canvasCovered) {
+        canvasCovered = true;
+        document.body.classList.add('reading');
+      }
+      return;
+    }
+  }
+
+  // ── Gap / transition zone ─────────────────────────────────────────────
+  //    Neither fully inside a track nor under a full article.
+  //    The canvas edge may be partially visible.  Instead of blindly
+  //    preserving canvasCovered (which renders based on noisy scrollDir),
+  //    detect the partially-visible model track and start ARC PHASE
+  //    immediately.  This guarantees the correct camera frame is already
+  //    painted the instant the compositor reveals the canvas edge.
+  for (let i = 0; i < modelTracks.length; i++) {
+    const rect = modelTracks[i].getBoundingClientRect();
+    if (rect.bottom > 0 && rect.top < vh) {
+      // This track is at least partially in the viewport.
+      const scrollable = rect.height - vh;
+      scrollT = scrollable > 0
+        ? Math.max(0, Math.min(1, -rect.top / scrollable))
+        : 0;
+
+      // Track-change guard (same as Priority 1): force synthetic blind
+      // spot if the partially-visible track belongs to a different set.
+      const setForTrack = Math.min(i, modelSets.length - 1);
+      if (setForTrack !== activeSetIndex) {
+        activeTrackIndex = i;
+        if (!canvasCovered) {
+          canvasCovered = true;
+          document.body.classList.add('reading');
+        }
+        return;
+      }
+
+      activeTrackIndex = i;
+      if (canvasCovered) {
+        canvasCovered = false;
+        document.body.classList.remove('reading');
+      }
+      return;
+    }
+  }
+
+  // True gap: no track visible, no article covering (e.g. very top /
+  // bottom of page, or intro curtain transition).  Preserve state.
+}
+window.addEventListener('scroll', readScroll, { passive: true });
+readScroll(); // initialise on load
+
+// Track the local arc-T for the current set so resolveHeroKey can
+// determine which desk the camera is facing.
+let currentLocalArcT = 0;
+let prevArcSide      = -1;   // 0 = home (arcT < 0.5), 1 = corporate (≥ 0.5)
+let _wasCanvasCovered = false; // flag to skip smoothing on first re-entry
+
+function updateScrollCamera() {
+  const N = modelSets.length;
+  if (!N) return;
+
+  // ── BLIND-SPOT PHASE — canvas hidden under an article section ───
+  if (canvasCovered) {
+    // First frame of blind-spot entry: clear hover tooltip, zone selection,
+    // and info panel before any article paint so nothing bleeds into reading.
+    if (!_wasCanvasCovered) clearInteractionState();
+    _wasCanvasCovered = true;
+
+    // ── Determine snapIdx and snapArcT from GEOMETRY, not scrollDir ──
+    //
+    // scrollDir is noisy: trackpad momentum, touch bounce, and sub-pixel
+    // scroll reversals can flip it for a frame.  A wrong snapArcT parks
+    // the camera at the wrong end of the arc; if the compositor reveals
+    // the canvas before the main thread corrects it, the user sees a
+    // split-second flash of the wrong desk.
+    //
+    // Instead we measure which model track is closest to the viewport
+    // edge.  The track whose edge is nearer will be revealed first,
+    // so we prep the camera for *that* track at the matching arcT.
+
+    const vh = window.innerHeight;
+    const bsMid = vh / 2;
+
+    let coveringArticleIdx = -1;
+    for (let a = 0; a < articleSections.length; a++) {
+      const ar = articleSections[a].getBoundingClientRect();
+      if (ar.top <= bsMid && ar.bottom >= bsMid) { coveringArticleIdx = a; break; }
+    }
+
+    let snapIdx, snapArcT;
+
+    if (coveringArticleIdx >= 0) {
+      // HTML layout guarantee: articleSections[a] sits between
+      //   modelTracks[a]   (above) and modelTracks[a+1] (below).
+      const aboveIdx = coveringArticleIdx;
+      const belowIdx = coveringArticleIdx + 1;
+
+      // Distance from each adjacent track's edge to the viewport edge.
+      const aboveDist = aboveIdx < modelTracks.length
+        ? Math.abs(modelTracks[aboveIdx].getBoundingClientRect().bottom)
+        : Infinity;
+      const belowDist = belowIdx < modelTracks.length
+        ? Math.abs(modelTracks[belowIdx].getBoundingClientRect().top - vh)
+        : Infinity;
+
+      if (aboveDist <= belowDist) {
+        // Closer to the track ABOVE → user will see its bottom → arcT = 1
+        snapIdx  = Math.min(aboveIdx, N - 1);
+        snapArcT = 1;
+      } else {
+        // Closer to the track BELOW → user will see its top → arcT = 0
+        snapIdx  = Math.min(belowIdx, N - 1);
+        snapArcT = 0;
+      }
+    } else {
+      // No article covers the viewport centre (synthetic blind-spot from
+      // track-change guard, or intro curtain).  activeTrackIndex was
+      // already updated by readScroll before the guard fired.
+      snapIdx  = Math.min(activeTrackIndex, N - 1);
+      snapArcT = scrollT >= 0.5 ? 1 : 0;
+    }
+
+    // Silently prep the 3D scene for the upcoming set — swap only the
+    // internal 3D state WITHOUT touching the title-overlay DOM at all.
+    // The article (z-index 70) fully covers all fixed overlays, so the
+    // user never sees a stale title.  The correct title is written fresh
+    // the moment the canvas reappears (first arc-phase frame).
+    if (snapIdx !== activeSetIndex) {
+      const s = modelSets[snapIdx];
+      if (s) {
+        activeSetIndex = snapIdx;
+        raycastTargets.length = 0; raycastTargets.push(...s.raycastTargets);
+        zoneNodes.length      = 0; zoneNodes.push(...s.zoneNodes);
+        zoneMeshSet.clear();       s.zoneMeshSet.forEach(m => zoneMeshSet.add(m));
+        loadedModels.length   = 0; loadedModels.push(...s.loadedModels);
+        billboardNodes.length = 0; if (s.billboardNodes) billboardNodes.push(...s.billboardNodes);
+        const labelEl = document.getElementById('setLabelFloatText');
+        if (labelEl) labelEl.textContent = `Barrier ${toRoman(snapIdx + 1)}`;
+        // Invalidate the hero-copy cache so the arc phase re-writes it.
+        currentHeroKey = null;
+      }
+    }
+
+    // Park the camera at the geometry-derived arc position.
+    // When _wasCanvasCovered fires on the first visible frame, rawArcT
+    // will already match this value, so the snap is a visual no-op.
+    currentLocalArcT = snapArcT;
+    smoothedScrollT  = snapArcT;
+
+    const set = modelSets[activeSetIndex];
+    if (set) {
+      const cam = computeSetCamera(set, snapArcT);
+      _tmpPos.copy(cam.pos);
+      _tmpTarget.copy(cam.target);
+    }
+    camera.position.copy(_tmpPos);
+    controls.target.copy(_tmpTarget);
+    // Sync OrbitControls internal state so its update() call later in
+    // the animate loop doesn't drift the camera via damping residuals.
+    controls.update();
+
+    // Write the new set's hero copy NOW, while the overlay is guaranteed
+    // invisible (body.reading is active → CSS transition:none → opacity 0).
+    // By the time the overlay fades back in (body.reading removed), the
+    // correct title + description are already in the DOM.
+    updateHeroCopy();
+    return;
+  }
+
+  // ── ARC PHASE — scrolling through a model track ─────────────────
+  const setIdx      = Math.min(activeTrackIndex, N - 1);
+  const hasTransIn  = setIdx > 0;           // has an article section before it
+  const hasTransOut = setIdx < N - 1;       // has an article section after it
+
+  // Apply dwell zones:
+  //   [0,          START_DWELL_FRAC)  → hold at arcT=0  (start dwell)
+  //   [START_DWELL, 1−DWELL_FRAC)     → 180° arc sweep
+  //   [1−DWELL_FRAC, 1]               → hold at arcT=1  (end dwell)
+  // The existing clamp handles both dwells automatically:
+  //   scrollT < arcStart → numerator < 0 → clamp to arcT = 0
+  //   scrollT > arcEnd   → numerator > arcLen → clamp to arcT = 1
+  const arcStart = hasTransIn  ? START_DWELL_FRAC : 0;
+  const arcEnd   = hasTransOut ? 1 - DWELL_FRAC   : 1;
+  const arcLen   = arcEnd - arcStart;
+
+  const rawArcT = arcLen > 0
+    ? Math.max(0, Math.min(1, (scrollT - arcStart) / arcLen))
+    : 0;
+
+  // On first frame after leaving an article:
+  //   • snap camera instantly (skip the easing lag)
+  //   • force the title-overlay to re-render for the correct set
+  //   • sync crossfade + OrbitControls in the same pass so the very
+  //     first compositor-visible frame is 100% correct
+  if (_wasCanvasCovered) {
+    smoothedScrollT   = rawArcT;
+    _wasCanvasCovered = false;
+    currentHeroKey    = null; // guarantee title re-evaluates this frame
+  } else {
+    smoothedScrollT += (rawArcT - smoothedScrollT) * 0.035;
+  }
+
+  currentLocalArcT = smoothedScrollT;
+
+  const set = modelSets[setIdx];
+  if (set) {
+    const cam = computeSetCamera(set, smoothedScrollT);
+    _tmpPos.copy(cam.pos);
+    _tmpTarget.copy(cam.target);
+  }
+
+  camera.position.copy(_tmpPos);
+  controls.target.copy(_tmpTarget);
+  // Sync OrbitControls so damping residuals cannot drift the camera
+  // away from the position we just computed.
+  controls.update();
+
+  // Per-set progress bar (raw scroll position for crisp feedback).
+  const bar = document.getElementById('setProgressBar');
+  if (bar) bar.style.width = (scrollT * 100) + '%';
+
+  // Auto-deselect when camera crosses the desk midpoint.
+  const curSide = currentLocalArcT < 0.5 ? 0 : 1;
+  if (prevArcSide >= 0 && curSide !== prevArcSide && selectedZone) deselectCurrent();
+  prevArcSide = curSide;
+
+  // ── Workspace indicator — crossfade labels with arc position ────────
+  // Opacity interpolates continuously across the full arc so labels
+  // fade naturally as the camera sweeps rather than snapping at 0.5.
+  // The active label also receives .is-active for the accent colour,
+  // toggled at the midpoint so CSS transition handles the colour change.
+  if (wiHomeEl && wiCorpEl) {
+    const t = currentLocalArcT;
+    // Opacity crossfade — unchanged.
+    wiHomeEl.style.opacity = 0.3 + 0.7 * (1 - t);
+    wiCorpEl.style.opacity = 0.3 + 0.7 * t;
+    // Active colour toggle at midpoint — unchanged.
+    wiHomeEl.classList.toggle('is-active', t < 0.5);
+    wiCorpEl.classList.toggle('is-active', t >= 0.5);
+    // Kinetic squeeze: active label expands to maxSize, inactive shrinks to minSize.
+    // Both values are interpolated continuously so the squeeze is fluid at 60fps.
+    const minSize = 0.6;  // rem — shrunken / inactive label
+    const maxSize = 0.85; // rem — expanded / active label
+    const homeSize = minSize + (maxSize - minSize) * (1 - t);
+    const corpSize = minSize + (maxSize - minSize) * t;
+    wiHomeEl.style.fontSize = homeSize.toFixed(3) + 'rem';
+    wiCorpEl.style.fontSize = corpSize.toFixed(3) + 'rem';
+  }
+
+  updateHeroCopy();
+}
+
+
+// ══════════════════════════════════════
+// TITLE FADE-IN
+// ══════════════════════════════════════
+const fadeEls = document.querySelectorAll('.title-overlay');
+fadeEls.forEach(el => {
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(calc(-50% + 20px))';
+  el.style.transition = 'opacity 0.9s ease, transform 0.9s ease';
+  requestAnimationFrame(() => {
+    el.style.opacity = '1';
+    el.style.transform = 'translateY(-50%)';
+  });
+});
+
+
+// ══════════════════════════════════════
+// RESIZE + RENDER
+// ══════════════════════════════════════
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ══════════════════════════════════════
+// CROSSFADE — scroll-driven opacity between the two desks in a set
+// ══════════════════════════════════════
+const _noop = () => {};
+
+function applyModelAlpha(model, alpha) {
+  if (!model || !model.root) return;
+  // alpha >= 0.5 → this model is the primary focus → keep it interactive
+  const interactive = alpha >= 0.5;
+  model.root.traverse((child) => {
+    if (!child.isMesh) return;
+
+    // ── Raycasting gate: only the primary (>=0.5) model is selectable ──
+    child.raycast = interactive ? THREE.Mesh.prototype.raycast : _noop;
+
+    // Proxy meshes are permanently rendered as zero-opacity / no colour-write.
+    // Skip the crossfade opacity logic entirely so it never overwrites those
+    // properties — but the raycast gate above still runs so the proxy activates
+    // and deactivates correctly when switching sets.
+    if (child.userData.isProxy) return;
+
+    // ── Surface opacity ──────────────────────────────────────────
+    const isGhost = child.userData.dashedEdge;
+    // Solid meshes at alpha === 1 belong in the OPAQUE render queue (transparent
+    // = false, depthWrite = true).  Forcing transparent = true on everything
+    // pushes large opaque objects (desk surface, chair, etc.) into the
+    // transparent sort pass where back-to-front ordering is not guaranteed,
+    // causing them to overwrite ghost surfaces that rendered earlier in the pass.
+    child.material.transparent = (alpha < 1) || isGhost;
+    // Ghost meshes that are currently highlighted (hover / select) own their
+    // own opacity — skip the crossfade override so the highlight tint stays
+    // visible at its full designated opacity instead of being clamped to 0.2.
+    if (!(isGhost && child.userData.isHighlighted)) {
+      // Ghost (dashed-edge) meshes have a max opacity of 0.2; scale within
+      // that range so they still participate in the crossfade without ever
+      // becoming fully opaque.
+      child.material.opacity = isGhost ? 0.2 * alpha : alpha;
+    }
+
+    // ── Edge line opacity (proportional to each line mat's base) ──
+    if (child.userData.lines) {
+      const lines = child.userData.lines;
+      if (!lines.material._cfOwned) {
+        const base = lines.material.opacity;
+        lines.material = lines.material.clone();
+        lines.material._cfOwned = true;
+        lines.material._cfBase = base;
+      }
+      lines.material.opacity = lines.material._cfBase * alpha;
+    }
+  });
+}
+
+function updateCrossfadeOpacity() {
+  for (let i = 0; i < modelSets.length; i++) {
+    const set = modelSets[i];
+    if (!set || !set.models || set.models.length < 2) continue;
+    if (i === activeSetIndex) {
+      const arcT = currentLocalArcT;
+      // models[0] = corporate desk (paths[0]): visible when arcT → 1
+      // models[1] = home desk     (paths[1]): visible when arcT → 0
+      applyModelAlpha(set.models[0], arcT);
+      applyModelAlpha(set.models[1], 1 - arcT);
+    }
+  }
+}
+
+// Smoothly lerp every zone toward its target part-animation offset.
+// Each zone has an animConfig {axis, distance} from PART_ANIMATIONS,
+// a basePosition (Vector3), and an animOffset scalar in [0..1].
+function updatePartAnimations() {
+  for (let i = 0; i < zoneNodes.length; i++) {
+    const z = zoneNodes[i];
+    const cfg = z.userData.animConfig;
+    if (!cfg || !z.userData.basePosition) continue;
+
+    const target = z.userData.animTarget || 0;
+    const cur = z.userData.animOffset || 0;
+    const diff = target - cur;
+    let next = cur;
+    if (Math.abs(diff) > 0.0005) next = cur + diff * 0.15;
+    else next = target;
+
+    if (next === cur && cur === 0) continue;
+    z.userData.animOffset = next;
+
+    // Apply offset along the configured local axis from the base position
+    const base = z.userData.basePosition;
+    z.position.copy(base);
+    if (cfg.distance) {
+      const k = next * cfg.distance;
+      if (cfg.axis === 'x')      z.position.x += k;
+      else if (cfg.axis === 'z') z.position.z += k;
+      else                       z.position.y += k;
+    }
+  }
+}
+
+// ══════════════════════════════════════
+// BACKGROUND — per-layer color that drifts with scroll progress
+// ══════════════════════════════════════
+// Four tones that progress warm → cool to reflect the "barrier layer"
+// concept: body/ergonomics → policy/personalization → operational
+// continuity → surveillance.  The transition follows smoothedScrollT so
+// it eases in sync with the camera rather than snapping on set swap.
+const BG_COLORS = [
+  new THREE.Color(0xfaf9f6),   // Set 0 — warm ivory   (body layer)
+  new THREE.Color(0xf4f6fa),   // Set 1 — cool blue-white (policy layer)
+  new THREE.Color(0xf0f5f0),   // Set 2 — muted green-white (operations)
+  new THREE.Color(0xf2f0f5),   // Set 3 — lavender-white (surveillance)
+];
+const _bgColor = new THREE.Color();
+
+// Inject the dot-matrix overlay once into the DOM.  It stays constant;
+// only its colour tint changes via a CSS variable.
+(function initBgOverlay() {
+  const el = document.createElement('div');
+  el.id = 'bgOverlay';
+  el.style.cssText = [
+    'position:fixed', 'inset:0', 'pointer-events:none',
+    'z-index:0',
+    // 24-px dot grid, opacity kept very low so it reads as texture
+    'background-image:radial-gradient(circle,rgba(0,0,0,0.055) 1px,transparent 1px)',
+    'background-size:24px 24px',
+    'transition:opacity 0.6s ease',
+  ].join(';');
+  document.body.appendChild(el);
+})();
+
+function updateBackground() {
+  const N   = Math.max(modelSets.length, 1);
+  const idx = Math.min(activeSetIndex, N - 1);
+  // Subtly drift from current set's colour toward next as the arc progresses.
+  const frac = smoothStep01(smoothedScrollT);
+
+  const colA = BG_COLORS[idx]                      || BG_COLORS[BG_COLORS.length - 1];
+  const colB = BG_COLORS[Math.min(idx + 1, N - 1)] || colA;
+  _bgColor.lerpColors(colA, colB, frac);
+
+  renderer.setClearColor(_bgColor, 1);
+  // Keep fog colour in sync so distant models dissolve into the same tint.
+  if (scene.fog) scene.fog.color.copy(_bgColor);
+}
+
+function updateBillboards() {
+  if (!billboardNodes.length) return;
+  const t = _bbClock.getElapsedTime();
+  for (const { node, parentWorldQ } of billboardNodes) {
+    // Face the camera: express the camera's world quaternion in the node's
+    // local space by pre-multiplying the inverse of the parent world rotation.
+    _bbLocalQ.copy(parentWorldQ).invert().multiply(camera.quaternion);
+    // Spin clockwise on the local facing axis (negative = CW in right-hand rule).
+    _bbSpinQ.setFromAxisAngle(_bbAxis, -t * BILLBOARD_SPIN_SPEED);
+    node.quaternion.copy(_bbLocalQ).multiply(_bbSpinQ);
+  }
+}
+
+(function animate() {
+  requestAnimationFrame(animate);
+  updateScrollCamera();
+  updateCrossfadeOpacity();
+  updateBillboards();
+  updateBackground();
+  controls.update();
+  updatePartAnimations();
+  renderer.render(scene, camera);
+})();
+
+
+// ════════════════════════════════════════════════════════════════
+// VIEW SWITCHER — Viewer / Insights
+// ════════════════════════════════════════════════════════════════
+const navViewer   = document.getElementById('navViewer');
+const navInsights = document.getElementById('navInsights');
+
+function setActiveNav(which) {
+  [navViewer, navInsights].forEach(el => el && el.classList.remove('active'));
+  if (which === 'viewer'   && navViewer)   navViewer.classList.add('active');
+  if (which === 'insights' && navInsights) navInsights.classList.add('active');
+}
+
+if (navViewer) navViewer.addEventListener('click', (e) => {
+  e.preventDefault();
+  setActiveNav('viewer');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+if (navInsights) navInsights.addEventListener('click', (e) => {
+  e.preventDefault();
+  setActiveNav('insights');
+  requestAnimationFrame(() => {
+    const conclusion = document.getElementById('article-conclusion');
+    if (conclusion) conclusion.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+</script>
+
+</body>
+</html>

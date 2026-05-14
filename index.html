@@ -1848,6 +1848,13 @@ controls.enableZoom = false;     // wheel is reserved for the scroll-driven came
 controls.autoRotate = false;     // no auto-rotate, scroll drives the view
 controls.autoRotateSpeed = 0.6;
 
+// OrbitControls sets touch-action:none on the canvas so it can own all
+// gestures — but since every interaction type is disabled here, that just
+// silently swallows every swipe and blocks iOS/iPadOS page scroll.
+// Restoring pan-y tells Safari "vertical swipes are still fair game for the
+// browser" so the page scrolls normally even when a finger starts on the canvas.
+renderer.domElement.style.touchAction = 'pan-y';
+
 // Track drag-vs-click so a click after dragging doesn't trigger selection
 let dragMoved = false;
 let dragStart = { x: 0, y: 0 };
